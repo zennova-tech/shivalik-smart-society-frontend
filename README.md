@@ -18,10 +18,10 @@ Built with **React 18 + TypeScript + Vite**, this admin panel empowers property 
 Powered by:
 - **Mantine UI v8**
 - **Tailwind CSS**
-- **Redux Toolki
+- **Redux Toolkit**
 - **Axios**
-- **React Router
-- React Hook Form** – Bulletproof forms
+- **React Router**
+- **React Hook Form**
 
 ---
 
