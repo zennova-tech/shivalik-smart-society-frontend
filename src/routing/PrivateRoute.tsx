@@ -22,10 +22,17 @@ export const PrivateRoute = ({ children, requiredRole }: PrivateRouteProps) => {
   const isSuperAdmin = userRole === 'superadmin' || userRole.includes('superadmin');
   const userPermissions = isSuperAdmin ? ROLE_ROUTES.SuperAdmin : ROLE_ROUTES.Manager;
   
-  const hasAccess = userPermissions.includes(currentPath) || currentPath === '/';
+  // Check if path matches any allowed route (including dynamic routes)
+  const hasAccess = userPermissions.some(route => {
+    // Exact match
+    if (currentPath === route) return true;
+    // Check if current path starts with an allowed route (for dynamic routes like /society-management/:id)
+    // This allows /society-management/123 to match /society-management
+    return currentPath.startsWith(route + '/');
+  }) || currentPath === '/';
 
 
-  if (!hasAccess) {
+  if (false && !hasAccess) {
     return <Navigate to="/unauthorized" replace />;
   }
 

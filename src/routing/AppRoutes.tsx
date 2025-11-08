@@ -10,6 +10,8 @@ import { FloorsPage } from '../pages/building-details/FloorsPage';
 import { BlocksPage } from '../pages/building-details/BlocksPage';
 import { UnitsPage } from '../pages/building-details/UnitsPage';
 import { NoticeBoardPage } from '../pages/building-details/NoticeBoardPage';
+import { AmenitiesPage } from '../pages/building-details/AmenitiesPage';
+import { ParkingPage } from '../pages/building-details/ParkingPage';
 import SocietyManagement from '../pages/society-management/SocietyManagement';
 
 /* current user roles */
@@ -51,12 +53,22 @@ const RedirectByRole = () => {
     return null; // let the child route render
   }
 
-  // Find the first matching default route
-  const defaultRoute = getDefaultRouteByRole();
-  return <Navigate to={defaultRoute} replace />;
+  // Check if a society is selected
+  try {
+    const selectedSociety = localStorage.getItem("selectedSociety");
+    if (selectedSociety) {
+      // If society is selected, go to dashboard
+      return <Navigate to="/dashboard" replace />;
+    }
+  } catch (error) {
+    console.error("Error checking selected society:", error);
+  }
+
+  // If no society is selected, redirect to society-management to select one
+  return <Navigate to="/society-management" replace />;
 };
 
-/* Component for catch-all redirects */
+/* Component that redirects unmatched routes within private area */
 const CatchAllRedirect = () => {
   const defaultRoute = getDefaultRouteByRole();
   return <Navigate to={defaultRoute} replace />;
@@ -106,6 +118,8 @@ export const AppRoutes = () => {
         <Route path="building-settings/blocks" element={<BlocksPage />} />
         <Route path="building-settings/units" element={<UnitsPage />} />
         <Route path="building-settings/notice-board" element={<NoticeBoardPage />} />
+        <Route path="building-settings/amenities" element={<AmenitiesPage />} />
+        <Route path="building-settings/parking" element={<ParkingPage />} />
         
         {/* Legacy routes for backward compatibility - redirect to new paths */}
         <Route path="building-details" element={<Navigate to="/building-settings/building-details" replace />} />
@@ -113,6 +127,8 @@ export const AppRoutes = () => {
         <Route path="blocks" element={<Navigate to="/building-settings/blocks" replace />} />
         <Route path="units" element={<Navigate to="/building-settings/units" replace />} />
         <Route path="notice-board" element={<Navigate to="/building-settings/notice-board" replace />} />
+        <Route path="amenities" element={<Navigate to="/building-settings/amenities" replace />} />
+        <Route path="parking" element={<Navigate to="/building-settings/parking" replace />} />
         
         {/* <Route path="users" element={<PeoplePage />} /> */}
 
