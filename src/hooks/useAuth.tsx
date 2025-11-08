@@ -67,13 +67,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (token && userData) {
       try {
         const parsedUser = JSON.parse(userData);
-        // Transform userRoles to role if needed
+        // Transform userRoles to role if needed, but prioritize role if it exists
+        const roleValue = parsedUser.role || parsedUser.userRoles?.join(',') || parsedUser.userRoles?.[0] || '';
         const transformedUser: User = {
           id: parsedUser.id || '',
           name: parsedUser.firstName + ' ' + parsedUser.lastName || parsedUser.name || '',
           email: parsedUser.email || '',
           phone: parsedUser.phone || '',
-          role: parsedUser.userRoles?.join(',') || '',
+          role: roleValue,
+          userRoles: parsedUser.userRoles || parsedUser.roles || (roleValue ? [roleValue] : []),
           avatar: parsedUser.avatar || ''
         };
         setUser(transformedUser);

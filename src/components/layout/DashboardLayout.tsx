@@ -17,12 +17,13 @@ import {
   IconHome,
   IconUser,
   IconSearch,
+  IconUsersGroup,
 } from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useState, useEffect, useRef, useMemo } from 'react';
 
-// Navigation array
-const navigation = [
+// Base navigation array (without role-specific items)
+const baseNavigation = [
   {
     name: 'Dashboard',
     href: '/dashboard',
@@ -105,11 +106,24 @@ const navigation = [
   },
 ];
 
-// Filter navigation based on user roles - simplified for Smart Society Management
-const getFilteredNavigation = (roles: string[] = []) => {
-  // For now, return all navigation items
-  // You can add role-based filtering here if needed
-  return navigation;
+// Filter navigation based on user roles
+const getFilteredNavigation = (roles: string[] = [], userRole: string = '') => {
+  // Check if user is superadmin/admin
+  const normalizedRole = userRole?.toLowerCase() || '';
+  const isSuperAdmin = normalizedRole === 'superadmin' || normalizedRole.includes('superadmin');
+  
+  // If superadmin, add Society Management as first item
+  if (isSuperAdmin) {
+    const societyManagementItem = {
+      name: 'Society Management',
+      href: '/society-management',
+      icon: IconUsersGroup,
+    };
+    return [societyManagementItem, ...baseNavigation];
+  }
+  
+  // For other roles, return base navigation
+  return baseNavigation;
 };
 
 export const DashboardLayout = () => {
@@ -125,7 +139,7 @@ export const DashboardLayout = () => {
     try {
       return JSON.parse(localStorage.getItem('tabOpenStates') || '{}');
     } catch {
-      return navigation.reduce((acc, item) => (item.subItems ? { ...acc, [item.href]: false } : acc), {});
+      return baseNavigation.reduce((acc, item) => (item.subItems ? { ...acc, [item.href]: false } : acc), {});
     }
   });
   const [logoutModal, setLogoutModal] = useState(false);
@@ -160,10 +174,15 @@ export const DashboardLayout = () => {
     return userRoles.length > 0 ? userRoles : (user?.role ? [user?.role] : []);
   }, [userRoles, user?.role]);
 
+  // Get user role string for navigation filtering
+  const userRoleString = useMemo(() => {
+    return user?.role || userInfo.role || effectiveRoles[0] || '';
+  }, [user?.role, userInfo.role, effectiveRoles]);
+
   // Apply filtered navigation based on roles
   const filteredNavigation = useMemo(() => {
-    return getFilteredNavigation(effectiveRoles);
-  }, [effectiveRoles]);
+    return getFilteredNavigation(effectiveRoles, userRoleString);
+  }, [effectiveRoles, userRoleString]);
 
   // Sync active path and tab states with current location
   useEffect(() => {
@@ -237,7 +256,7 @@ export const DashboardLayout = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleTabClick = (item: typeof navigation[0]) => {
+  const handleTabClick = (item: typeof baseNavigation[0]) => {
     // If sidebar is collapsed and user clicks, expand it permanently
     if (sidebarCollapsed) {
       setSidebarCollapsed(false);
@@ -315,7 +334,7 @@ export const DashboardLayout = () => {
     }
   };
 
-  const NavItem = ({ item }: { item: typeof navigation[0] }) => {
+  const NavItem = ({ item }: { item: typeof baseNavigation[0] }) => {
     const hasSubItems = !!item.subItems;
     const isActive =
       activePath === item.href ||

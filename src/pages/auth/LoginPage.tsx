@@ -57,12 +57,15 @@ export const LoginPage = () => {
       showMessage("Login successful");
       dispatch(resetLoginUser());
       
-      const role: string = userData?.role;
-      if (role?.toLowerCase() === "superadmin") {
-        navigate("/society-management");
-      } else {
-        navigate("/dashboard");
-      }
+      setTimeout(() => {
+        const role: string = userData?.role || "";
+        const normalizedRole = role?.toLowerCase() || "";
+        if (normalizedRole === "superadmin" || normalizedRole.includes("superadmin")) {
+          navigate("/society-management", { replace: true });
+        } else {
+          navigate("/dashboard", { replace: true });
+        }
+      }, 0);
 
     } else if (status === "failed") {
       showMessage(

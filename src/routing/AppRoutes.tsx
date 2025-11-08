@@ -16,16 +16,35 @@ import SocietyManagement from '../pages/society-management/SocietyManagement';
 const getUserRoles = (): string => {
   try {
     const info = JSON.parse(localStorage.getItem("userInfo") ?? "{}");
-    return info.role;
+    // Check for role in multiple formats: role, userRoles array, or roles array
+    if (info.role) {
+      return info.role;
+    }
+    if (Array.isArray(info.userRoles) && info.userRoles.length > 0) {
+      return info.userRoles[0]; // Return first role from array
+    }
+    if (Array.isArray(info.roles) && info.roles.length > 0) {
+      return info.roles[0]; // Return first role from array
+    }
+    return "Guest";
   } catch {
     return "Guest";
   }
 };
 
+/* Component that decides where to redirect based on role */
+const getDefaultRouteByRole = (): string => {
+  const role = getUserRoles();
+  // Handle both "superadmin" and "SuperAdmin" formats
+  const normalizedRole = role?.toLowerCase() || "";
+  return normalizedRole === "superadmin" || normalizedRole.includes("superadmin")
+    ? "/society-management" 
+    : "/dashboard";
+};
+
 /* Component that decides where to redirect  */
 const RedirectByRole = () => {
   const location = useLocation();
-  const role = getUserRoles();
 
   // If we are already on a page that belongs to the user – stay there
   if (location.pathname !== "/" && location.pathname !== "") {
@@ -33,9 +52,13 @@ const RedirectByRole = () => {
   }
 
   // Find the first matching default route
-  const defaultRoute = role?.toLowerCase() === "superadmin" 
-    ? "/society-management" 
-    : "/dashboard";
+  const defaultRoute = getDefaultRouteByRole();
+  return <Navigate to={defaultRoute} replace />;
+};
+
+/* Component for catch-all redirects */
+const CatchAllRedirect = () => {
+  const defaultRoute = getDefaultRouteByRole();
   return <Navigate to={defaultRoute} replace />;
 };
 
@@ -93,8 +116,8 @@ export const AppRoutes = () => {
         
         {/* <Route path="users" element={<PeoplePage />} /> */}
 
-        {/* Catch-all inside private area (keeps the layout) */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        {/* Catch-all inside private area (keeps the layout) - redirect based on role */}
+        <Route path="*" element={<CatchAllRedirect />} />
       </Route>
 
       {/* Global catch-all (outside private area) */}
