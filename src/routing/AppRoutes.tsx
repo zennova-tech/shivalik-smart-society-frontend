@@ -1,44 +1,37 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { PrivateRoute } from './PrivateRoute';
-import { PublicRoute } from './PublicRoute';
-import { LoginPage } from '../pages/auth/LoginPage';
-import { OtpPage } from '../pages/auth/OtpPage';
-import { DashboardLayout } from '../components/layout/DashboardLayout';
-import { DashboardPage } from '../pages/DashboardPage';
-import { BuildingDetailsPage } from '../pages/BuildingDetailsPage';
-import { PlaceholderPage } from '../pages/PlaceholderPage';
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { PrivateRoute } from "./PrivateRoute";
+import { PublicRoute } from "./PublicRoute";
+import { LoginPage } from "../pages/auth/LoginPage";
+import { OtpPage } from "../pages/auth/OtpPage";
+import { DashboardLayout } from "../components/layout/DashboardLayout";
+import { DashboardPage } from "../pages/DashboardPage";
+import { BuildingDetailsPage } from "../pages/BuildingDetailsPage";
+import SocietyManagement from "@/pages/society-management/SocietyManagement";
+import { ROLE_DEFAULTS } from "./route.config";
 
 /* current user roles */
-const getUserRoles = (): string[] => {
+const getUserRoles = (): string => {
   try {
-    const info = JSON.parse(localStorage.getItem('userInfo') ?? '{}');
-    return Array.isArray(info.userRoles) ? info.userRoles : ['Guest'];
+    const info = JSON.parse(localStorage.getItem("userInfo") ?? "{}");
+    return info.role;
   } catch {
-    return ['Guest'];
+    return "Guest";
   }
-};
-
-/* Role default route mapping */
-const ROLE_DEFAULTS: Record<string, string> = {
-  SuperAdmin: '/society-management',
-  Manager: "/dashboard"
 };
 
 /* Component that decides where to redirect  */
 const RedirectByRole = () => {
   const location = useLocation();
-  const roles = getUserRoles();
+  const role = getUserRoles();
 
   // If we are already on a page that belongs to the user – stay there
-  if (location.pathname !== '/' && location.pathname !== '') {
+  if (location.pathname !== "/" && location.pathname !== "") {
     return null; // let the child route render
   }
 
   // Find the first matching default route
-  for (const role of roles) {
-    if (ROLE_DEFAULTS[role]) {
-      return <Navigate to={ROLE_DEFAULTS[role]} replace />;
-    }
+  if (ROLE_DEFAULTS[role]) {
+    return <Navigate to={ROLE_DEFAULTS[role]} replace />;
   }
 
   // Fallback for unknown / Guest
@@ -81,6 +74,7 @@ export const AppRoutes = () => {
 
         {/* All private pages  */}
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="society-management" element={<SocietyManagement />} />
         <Route path="building-details" element={<BuildingDetailsPage />} />
         {/* <Route path="users" element={<PeoplePage />} /> */}
 

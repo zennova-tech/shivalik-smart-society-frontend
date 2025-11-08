@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { ROLE_ROUTES } from './route.config';
 
 interface PrivateRouteProps {
   children: React.ReactNode;
@@ -13,10 +14,14 @@ export const PrivateRoute = ({ children, requiredRole }: PrivateRouteProps) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
   
-  const userPermissions = user?.userRoles || [];
+  const userPermissions = user.role == "superadmin" ? ROLE_ROUTES.SuperAdmin : ROLE_ROUTES.Manager;
   const currentPath = location.pathname;
-
-  const hasAccess = userPermissions.includes(currentPath) && (requiredRole && user?.role !== requiredRole);
+  console.log("userPermissions", userPermissions);
+  console.log("currentPath", currentPath);
+  
+  const hasAccess = userPermissions.includes(currentPath);
+  console.log("has access", hasAccess);
+  
 
   if (!hasAccess) {
     return <Navigate to="/unauthorized" replace />;
