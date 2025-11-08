@@ -12,8 +12,13 @@ export const PrivateRoute = ({ children, requiredRole }: PrivateRouteProps) => {
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
+  
+  const userPermissions = user?.userRoles || [];
+  const currentPath = location.pathname;
 
-  if (requiredRole && user?.role !== requiredRole) {
+  const hasAccess = userPermissions.includes(currentPath) && (requiredRole && user?.role !== requiredRole);
+
+  if (!hasAccess) {
     return <Navigate to="/unauthorized" replace />;
   }
 

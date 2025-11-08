@@ -17,7 +17,8 @@ const getUserRoles = (): string[] => {
 
 /* Role default route mapping */
 const ROLE_DEFAULTS: Record<string, string> = {
-  SuperAdmin: '/users',
+  SuperAdmin: '/society-management',
+  Manager: "/dashboard"
 };
 
 /* Component that decides where to redirect  */
