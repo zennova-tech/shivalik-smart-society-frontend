@@ -86,7 +86,8 @@ const navigation = [
 
 // Mapping of roles allowed tabs
 const roleToTabs: Record<string, string[]> = {
-  SuperAdmin: navigation.map((item) => item.name), // all
+  SuperAdmin: navigation.map((item) => item.name), 
+  Manager: ['Dashboard'],
   LandManager: ['Dashboard', 'Desk', 'Territory'],
   LandExecutive: ['Dashboard', 'Desk', 'Territory'],
   FundManager: ['Dashboard', 'Desk'],
@@ -249,34 +250,16 @@ export const DashboardLayout = () => {
       const storedPath = localStorage.getItem('lastActivePath');
       const currentPath = location.pathname;
       
-      // Only navigate if we're not already on a valid path
-      const isCurrentPathValid = filteredNavigation.some(
-        (item) =>
-          item.href === currentPath ||
-          (item.subItems && item.subItems.some((sub) => sub.href === currentPath))
-      );
-      
-      if (isCurrentPathValid && currentPath !== '/') {
-        // Already on a valid path, no need to navigate
-        return;
-      }
-      
-      const isValidPath = storedPath && filteredNavigation.some(
-        (item) =>
-          item.href === storedPath ||
-          (item.subItems && item.subItems.some((sub) => sub.href === storedPath))
-      );
-      
-      if (storedPath && isValidPath && storedPath !== currentPath) {
-        navigate(storedPath, { replace: true });
-      } else if (!isValidPath || !storedPath) {
-        // If stored path is invalid or doesn't exist, navigate to default
-        const defaultPath = '/dashboard';
-        localStorage.setItem('lastActivePath', defaultPath);
-        if (currentPath !== defaultPath) {
-          navigate(defaultPath, { replace: true });
+      // Only redirect if we're on root path
+      if (currentPath === '/' || currentPath === '') {
+        // If we have a stored path, use it; otherwise go to dashboard
+        if (storedPath && storedPath !== '/') {
+          navigate(storedPath, { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
         }
       }
+      // For all other paths, let them render (dashboard, placeholder, etc.)
     }, 0);
     
     return () => clearTimeout(timeoutId);
@@ -550,6 +533,7 @@ export const DashboardLayout = () => {
           ${sidebarCollapsed && !sidebarHovered ? 'w-20' : 'w-[280px] lg:w-[300px]'}
           flex flex-col
           border-r border-gray-200
+          bg-primary-white
         `}
         onMouseEnter={() => {
           // Only enable hover expand on desktop (lg breakpoint and above)

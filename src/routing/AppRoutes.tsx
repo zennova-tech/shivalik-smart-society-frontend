@@ -5,6 +5,7 @@ import { LoginPage } from '../pages/auth/LoginPage';
 import { OtpPage } from '../pages/auth/OtpPage';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
 import { DashboardPage } from '../pages/DashboardPage';
+import { PlaceholderPage } from '../pages/PlaceholderPage';
 
 /* current user roles */
 const getUserRoles = (): string[] => {
@@ -81,8 +82,8 @@ export const AppRoutes = () => {
         <Route path="dashboard" element={<DashboardPage />} />
         {/* <Route path="users" element={<PeoplePage />} /> */}
 
-        {/* Catch-all inside private area (keeps the layout) */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        {/* Catch-all inside private area - shows placeholder page instead of redirecting */}
+        <Route path="*" element={<PlaceholderPage />} />
       </Route>
 
       {/* Global catch-all (outside private area) */}
