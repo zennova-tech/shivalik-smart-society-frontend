@@ -148,7 +148,10 @@ export const BuildingDetailsPage = () => {
     });
   };
 
-  const onSubmit = async (data: BuildingDetailsFormData) => {
+  const onSubmit = async (data: BuildingDetailsFormData, e?: React.BaseSyntheticEvent) => {
+    // Prevent default form submission behavior
+    e?.preventDefault();
+    
     // Get society ID (refresh in case it changed)
     const currentSocietyId = getSocietyId();
     
@@ -169,7 +172,7 @@ export const BuildingDetailsPage = () => {
 
     // Map form data to API payload structure
     const payload: UpdateBuildingPayload = {
-      societyId: currentSocietyId, // Include society ID for update/create operation
+      societyId: currentSocietyId,
       society: {
         name: data.societyName,
         logo: logoBase64, // Send base64 string or undefined
@@ -211,7 +214,13 @@ export const BuildingDetailsPage = () => {
 
         {/* Form */}
         {fetchStatus !== 'loading' && (
-          <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-lg border border-gray-200 p-6 lg:p-8">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit(onSubmit)(e);
+            }} 
+            className="bg-white rounded-lg border border-gray-200 p-6 lg:p-8"
+          >
           {/* Basic Information Section */}
           <div className="mb-8">
             <h2 className="text-xl font-semibold text-primary-black mb-6">Basic Information</h2>

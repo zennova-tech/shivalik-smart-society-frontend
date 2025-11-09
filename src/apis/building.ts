@@ -31,7 +31,7 @@ export const getBuildingApi = async (societyId: string): Promise<any> => {
 export const updateBuildingApi = async (data: UpdateBuildingPayload): Promise<any> => {
     return await apiRequest<any>({
         method: 'PUT',
-        url: 'building-details',
+        url: `building-details/${data?.societyId}`,
         data: data,
     });
 };
