@@ -1,0 +1,87 @@
+name: Deploy to S3 + CloudFront (main branch)
+
+on:
+  push:
+    branches:
+      - main # only deploy when pushing to main
+
+env:
+  DIST_DIR: dist
+  INDEX_FILE: index.html
+  SW_FILE: sw.js
+  MANIFEST_FILE: manifest.webmanifest
+  LONG_CACHE: "public, max-age=31536000, immutable"
+  SHORT_CACHE: "no-cache, no-store, must-revalidate"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload all files to S3
+        run: |
+          aws s3 sync $DIST_DIR s3://$S3_BUCKET --delete --acl private --no-progress
+        env:
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+
+      - name: Set correct cache headers for key files
+        run: |
+          # index.html (short cache)
+          aws s3 cp "$DIST_DIR/$INDEX_FILE" "s3://$S3_BUCKET/$INDEX_FILE" \
+            --cache-control "$SHORT_CACHE" \
+            --content-type "text/html; charset=utf-8" \
+            --metadata-directive "REPLACE" \
+            --acl private
+
+          # sw.js (service worker - short cache)
+          if [ -f "$DIST_DIR/$SW_FILE" ]; then
+            aws s3 cp "$DIST_DIR/$SW_FILE" "s3://$S3_BUCKET/$SW_FILE" \
+              --cache-control "$SHORT_CACHE" \
+              --content-type "application/javascript" \
+              --metadata-directive "REPLACE" \
+              --acl private
+          fi
+
+          # manifest.webmanifest (short cache)
+          if [ -f "$DIST_DIR/$MANIFEST_FILE" ]; then
+            aws s3 cp "$DIST_DIR/$MANIFEST_FILE" "s3://$S3_BUCKET/$MANIFEST_FILE" \
+              --cache-control "$SHORT_CACHE" \
+              --content-type "application/manifest+json" \
+              --metadata-directive "REPLACE" \
+              --acl private
+          fi
+        env:
+          DIST_DIR: ${{ env.DIST_DIR }}
+          INDEX_FILE: ${{ env.INDEX_FILE }}
+          SW_FILE: ${{ env.SW_FILE }}
+          MANIFEST_FILE: ${{ env.MANIFEST_FILE }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          SHORT_CACHE: ${{ env.SHORT_CACHE }}
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
