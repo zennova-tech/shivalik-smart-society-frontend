@@ -2,115 +2,15 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   IconLogout,
   IconCaretDown,
-  IconCalendar,
-  IconMessageCircle2,
   IconChevronLeft,
   IconChevronRight,
   IconMenu2,
   IconX,
-  IconTool,
-  IconCar,
-  IconBuilding,
-  IconPhoto,
-  IconCalendarEvent,
-  IconAlertCircle,
-  IconHome,
-  IconUser,
   IconSearch,
 } from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useState, useEffect, useRef, useMemo } from 'react';
-
-// Navigation array
-const navigation = [
-  {
-    name: 'Dashboard',
-    href: '/dashboard',
-    icon: IconHome,
-  },
-  {
-    name:'Building Settings',
-    href: '/building-settings',
-    icon: IconBuilding,
-    subItems: [
-      { name: 'Building Details', href: '/building-settings/building-details' },
-      { name: 'Floors', href: '/building-settings/floors' },
-      { name: 'Blocks', href: '/building-settings/blocks' },
-      { name: 'Units', href: '/building-settings/units' },
-      { name: 'Parking', href: '/building-settings/parking' },
-      { name: 'Notice Board', href: '/building-settings/notice-board' },
-      { name: 'Amenities', href: '/building-settings/amenities' },
-    ],
-  },
-  {
-    name: 'Users',
-    href: '/users',
-    icon: IconUser,
-    subItems: [
-      { name: 'Members', href: '/users/members' },
-      { name: 'Society Employee', href: '/users/society-employee' },
-      { name: 'Committee Member', href: '/users/committee-member' },
-    ],
-  },
-  {
-    name: 'Maintenance & Bill',
-    href: '/maintenance-bill',
-    icon: IconTool,
-    subItems: [
-      { name: 'Add Bill', href: '/maintenance-bill/add-bill' },
-      { name: 'Add Maintenance', href: '/maintenance-bill/add-maintenance' },
-      { name: 'View Maintenance & Bill', href: '/maintenance-bill/view' },
-    ],
-  },
-  {
-    name: 'Complaints',
-    href: '/complaints',
-    icon: IconMessageCircle2,
-  },
-  {
-    name: 'Parking',
-    href: '/parking',
-    icon: IconCar,
-    subItems: [
-      { name: 'Members Vehicles', href: '/parking/members-vehicles' },
-      { name: 'Vehicle In/Out', href: '/parking/vehicle-in-out' },
-      { name: 'Parking Settings', href: '/parking/settings' },
-      { name: 'Tag Reader Report', href: '/parking/tag-reader-report' },
-      { name: 'RFID Report', href: '/parking/rfid-report' },
-    ],
-  },
-  {
-    name: 'Events',
-    href: '/events',
-    icon: IconCalendar,
-    subItems: [
-      { name: 'Add Event', href: '/events/add' },
-      { name: 'View Events', href: '/events/view' },
-    ],
-  },
-  {
-    name: 'Building Gallery',
-    href: '/building-gallery',
-    icon: IconPhoto,
-  },
-  {
-    name: 'Book Amenity',
-    href: '/book-amenity',
-    icon: IconCalendarEvent,
-  },
-  {
-    name: 'Penalty',
-    href: '/penalty',
-    icon: IconAlertCircle,
-  },
-];
-
-// Filter navigation based on user roles - simplified for Smart Society Management
-const getFilteredNavigation = (roles: string[] = []) => {
-  // For now, return all navigation items
-  // You can add role-based filtering here if needed
-  return navigation;
-};
+import { getMenuItemsForRole, MenuItem } from '../../routing/route.config';
 
 export const DashboardLayout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -125,7 +25,7 @@ export const DashboardLayout = () => {
     try {
       return JSON.parse(localStorage.getItem('tabOpenStates') || '{}');
     } catch {
-      return navigation.reduce((acc, item) => (item.subItems ? { ...acc, [item.href]: false } : acc), {});
+      return {};
     }
   });
   const [logoutModal, setLogoutModal] = useState(false);
@@ -153,17 +53,76 @@ export const DashboardLayout = () => {
   }, []);
 
   const userRoles = useMemo(() => {
-    return Array.isArray(userInfo.userRoles) ? userInfo.userRoles : [];
-  }, [userInfo.userRoles]);
+    if (Array.isArray(userInfo.userRoles) && userInfo.userRoles.length > 0) {
+      return userInfo.userRoles;
+    }
+    if (userInfo.role) {
+      if (typeof userInfo.role === 'string') {
+        return userInfo.role.split(',').map(r => r.trim()).filter(r => r.length > 0);
+      }
+      return [userInfo.role];
+    }
+    if (user?.role) {
+      if (typeof user.role === 'string') {
+        return user.role.split(',').map(r => r.trim()).filter(r => r.length > 0);
+      }
+      return [user.role];
+    }
+    return [];
+  }, [userInfo.userRoles, userInfo.role, user?.role]);
 
   const effectiveRoles = useMemo(() => {
-    return userRoles.length > 0 ? userRoles : (user?.role ? [user?.role] : []);
-  }, [userRoles, user?.role]);
+    const roles = userRoles.length > 0 ? userRoles : [];
+    console.log('Effective roles:', roles);
+    return roles;
+  }, [userRoles]);
 
-  // Apply filtered navigation based on roles
+  const [hasSelectedSociety, setHasSelectedSociety] = useState(() => {
+    try {
+      const selectedSociety = localStorage.getItem('selectedSociety');
+      return !!selectedSociety;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const checkSocietySelection = () => {
+      try {
+        const selectedSociety = localStorage.getItem('selectedSociety');
+        setHasSelectedSociety(!!selectedSociety);
+      } catch {
+        setHasSelectedSociety(false);
+      }
+    };
+
+    checkSocietySelection();
+
+    // Listen for storage changes (when society is selected from another tab/window)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'selectedSociety') {
+        checkSocietySelection();
+      }
+    };
+
+    // Listen for custom event (when society is selected in current tab)
+    const handleSocietySelected = () => {
+      checkSocietySelection();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('societySelected', handleSocietySelected);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('societySelected', handleSocietySelected);
+    };
+  }, [location.pathname]);
+
+  // Get filtered navigation based on roles and society selection
   const filteredNavigation = useMemo(() => {
-    return getFilteredNavigation(effectiveRoles);
-  }, [effectiveRoles]);
+    return getMenuItemsForRole(effectiveRoles, hasSelectedSociety, location.pathname);
+  }, [effectiveRoles, hasSelectedSociety, location.pathname]);
 
   // Sync active path and tab states with current location
   useEffect(() => {
@@ -237,7 +196,7 @@ export const DashboardLayout = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleTabClick = (item: typeof navigation[0]) => {
+  const handleTabClick = (item: MenuItem) => {
     // If sidebar is collapsed and user clicks, expand it permanently
     if (sidebarCollapsed) {
       setSidebarCollapsed(false);
@@ -315,7 +274,7 @@ export const DashboardLayout = () => {
     }
   };
 
-  const NavItem = ({ item }: { item: typeof navigation[0] }) => {
+  const NavItem = ({ item }: { item: MenuItem }) => {
     const hasSubItems = !!item.subItems;
     const isActive =
       activePath === item.href ||
@@ -475,12 +434,21 @@ export const DashboardLayout = () => {
 
         {/* Navigation Section */}
         <div className="flex-1 overflow-y-auto scrollbar-hide px-2">
-          <ul className="p-0 m-0">
+          {filteredNavigation.length > 0 ? (
+            <ul className="p-0 m-0">
               {filteredNavigation.map((item) => (
                 <NavItem key={item.name} item={item} />
               ))}
             </ul>
-          </div>
+          ) : (
+            <div className="p-4 text-center text-sm text-gray-500">
+              <p>No menu items available</p>
+              <p className="text-xs mt-2">Roles: {effectiveRoles.join(', ') || 'None'}</p>
+              <p className="text-xs">Path: {location.pathname}</p>
+              <p className="text-xs">Society Selected: {hasSelectedSociety ? 'Yes' : 'No'}</p>
+            </div>
+          )}
+        </div>
 
         {/* Version Section */}
         <div className="p-4 border-t border-gray-200/10">

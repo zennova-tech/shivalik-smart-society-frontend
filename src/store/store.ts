@@ -3,6 +3,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import createSagaMiddleware from 'redux-saga';
 import authSlice from './slices/authSlice';
 import otpSlice from './slices/otpSlice';
+import societySlice from './slices/societySlice';
 import buildingSlice from './slices/buildingSlice';
 import rootSaga from './sagas/rootSaga';
 
@@ -12,6 +13,7 @@ export const store = configureStore({
   reducer: {
     auth: authSlice,
     otp: otpSlice,
+    society: societySlice,
     building: buildingSlice,
   },
   middleware: (getDefaultMiddleware) =>
