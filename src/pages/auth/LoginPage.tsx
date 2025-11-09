@@ -44,28 +44,27 @@ export const LoginPage = () => {
         email: userData.email || "",
         phone: userData.mobileNumber || "",
         role: userData.role || "",
-        societyId: userData.society,
-        userRoles: userData.roles || [],
+        userRoles: userData.roles || userData.role ? [userData.role] : [],
         avatar: userData.avatar || "",
       };
 
       const accessToken = authUser.data.token || "";
-      authLogin(userInfo, accessToken);
+      
+      // CRITICAL: Set localStorage FIRST before updating auth context
+      // This ensures PrivateRoute can read the role immediately
       setToLocalStorage("userInfo", JSON.stringify(userInfo));
       setToLocalStorage("auth_token", accessToken);
+      
+      // Then update auth context
+      authLogin(userInfo, accessToken);
 
       showMessage("Login successful");
       dispatch(resetLoginUser());
       
-      setTimeout(() => {
-        const role: string = userData?.role || "";
-        const normalizedRole = role?.toLowerCase() || "";
-        if (normalizedRole === "superadmin" || normalizedRole.includes("superadmin")) {
-          navigate("/society-management", { replace: true });
-        } else {
-          navigate("/dashboard", { replace: true });
-        }
-      }, 0);
+      // Don't navigate here - let PublicRoute handle the redirect
+      // This ensures a single source of truth for post-login navigation
+      // The PublicRoute will detect authentication and redirect appropriately
+      console.log("LoginPage - Authentication complete, waiting for PublicRoute redirect");
 
     } else if (status === "failed") {
       showMessage(

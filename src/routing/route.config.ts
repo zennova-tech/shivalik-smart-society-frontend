@@ -21,7 +21,7 @@ export interface MenuItem {
 
 export const ROLE_DEFAULTS: Record<string, string> = {
   SuperAdmin: '/society-management',
-  Manager: '/society-management'
+  Manager: '/dashboard'
 };
 
 export const ROLE_ROUTES: Record<string, string[]> = {
@@ -46,7 +46,6 @@ export const ROLE_ROUTES: Record<string, string[]> = {
   ],
   Manager: [
     '/dashboard',
-    '/society-management',
     '/building-settings/building-details',
     '/building-settings/floors',
     '/building-settings/blocks',
@@ -71,7 +70,7 @@ const BASE_MENU_ITEMS: MenuItem[] = [
     name: 'Society Management',
     href: '/society-management',
     icon: IconBuilding,
-    roles: ['SuperAdmin', 'Manager'], // Available to all roles
+    roles: ['SuperAdmin'], // Only available to SuperAdmin
   },
   {
     name: 'Dashboard',
@@ -207,20 +206,53 @@ export const getMenuItemsForRole = (
     currentPath
   });
 
-  // If on society-management page or no society is selected, only show Society Management
-  if (currentPath === '/society-management' || !hasSelectedSociety) {
-    // Always show Society Management when on that page or no society selected
-    // (regardless of roles, as user needs to be able to select a society)
+  // Only show Society Management to SuperAdmin
+  // For non-superadmin users, always filter it out
+  const isSuperAdmin = normalizedRoles.some(role => 
+    normalizeRole(role) === 'superadmin' || normalizeRole(role).includes('superadmin')
+  );
+
+  // If on society-management page or no society is selected, only show Society Management for SuperAdmin
+  if ((currentPath === '/society-management' || !hasSelectedSociety) && isSuperAdmin) {
+    // Only show Society Management for SuperAdmin when on that page or no society selected
     const societyManagementItem = BASE_MENU_ITEMS.find(
       (item) => item.href === '/society-management'
     );
     const result = societyManagementItem ? [societyManagementItem] : [];
-    console.log('Society Management items (always shown):', result);
+    console.log('Society Management items (SuperAdmin only):', result);
     return result;
   }
 
+  // If not superadmin and on society-management page, they shouldn't be here (will be redirected)
+  // So show dashboard and other items
+  if (currentPath === '/society-management' && !isSuperAdmin) {
+    // Filter out society management and show other items
+    return BASE_MENU_ITEMS.filter((item) => {
+      if (item.href === '/society-management') return false;
+      if (!item.roles || item.roles.length === 0) return true;
+      if (normalizedRoles.length === 0) return true;
+      return hasMatchingRole(normalizedRoles, item.roles);
+    });
+  }
+
+  // If no society selected and not superadmin, show other menu items (they'll be redirected to dashboard)
+  if (!hasSelectedSociety && !isSuperAdmin) {
+    return BASE_MENU_ITEMS.filter((item) => {
+      if (item.href === '/society-management') return false;
+      if (!item.roles || item.roles.length === 0) return true;
+      if (normalizedRoles.length === 0) return true;
+      return hasMatchingRole(normalizedRoles, item.roles);
+    });
+  }
+
   // If society is selected, filter menu items based on roles
+  // Always exclude Society Management for non-superadmin users
   const filteredItems = BASE_MENU_ITEMS.filter((item) => {
+    // Always hide Society Management for non-superadmin users
+    if (item.href === '/society-management' && !isSuperAdmin) {
+      return false;
+    }
+    
     // If item has no roles specified, show it to everyone
     if (!item.roles || item.roles.length === 0) {
       return true;

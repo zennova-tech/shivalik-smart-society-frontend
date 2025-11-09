@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { PrivateRoute } from './PrivateRoute';
 import { PublicRoute } from './PublicRoute';
+import { ProtectedSocietyRoute } from './ProtectedSocietyRoute';
+import { ProtectedDashboardRoute } from './ProtectedDashboardRoute';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { OtpPage } from '../pages/auth/OtpPage';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
@@ -39,6 +41,7 @@ const getDefaultRouteByRole = (): string => {
   const role = getUserRoles();
   // Handle both "superadmin" and "SuperAdmin" formats
   const normalizedRole = role?.toLowerCase() || "";
+  // SuperAdmin always goes to society-management, others go to dashboard
   return normalizedRole === "superadmin" || normalizedRole.includes("superadmin")
     ? "/society-management" 
     : "/dashboard";
@@ -47,25 +50,30 @@ const getDefaultRouteByRole = (): string => {
 /* Component that decides where to redirect  */
 const RedirectByRole = () => {
   const location = useLocation();
+  const role = getUserRoles();
+  const normalizedRole = role?.toLowerCase() || "";
+
+  console.log("RedirectByRole - Pathname:", location.pathname, "Role:", role);
 
   // If we are already on a page that belongs to the user – stay there
   if (location.pathname !== "/" && location.pathname !== "") {
+    console.log("RedirectByRole - Already on a valid path, staying there");
     return null; // let the child route render
   }
 
-  // Check if a society is selected
-  try {
-    const selectedSociety = localStorage.getItem("selectedSociety");
-    if (selectedSociety) {
-      // If society is selected, go to dashboard
-      return <Navigate to="/dashboard" replace />;
-    }
-  } catch (error) {
-    console.error("Error checking selected society:", error);
+  // Only superadmin needs to select a society
+  // SuperAdmin always goes to society-management page first
+  // Managers and other roles are assigned to a society by admin, so go directly to dashboard
+  if (normalizedRole === "superadmin" || normalizedRole.includes("superadmin")) {
+    // SuperAdmin always redirected to society-management page first
+    console.log("RedirectByRole - Redirecting SuperAdmin to society-management");
+    return <Navigate to="/society-management" replace />;
   }
 
-  // If no society is selected, redirect to society-management to select one
-  return <Navigate to="/society-management" replace />;
+  // For all other roles (manager, member, etc.), go directly to dashboard
+  // They don't need to select a society as admin assigns them to one
+  console.log("RedirectByRole - Redirecting non-superadmin to dashboard");
+  return <Navigate to="/dashboard" replace />;
 };
 
 /* Component that redirects unmatched routes within private area */
@@ -109,8 +117,22 @@ export const AppRoutes = () => {
         <Route index element={<RedirectByRole />} />
 
         {/* All private pages  */}
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="society-management" element={<SocietyManagement />} />
+        <Route
+          path="dashboard"
+          element={
+            <ProtectedDashboardRoute>
+              <DashboardPage />
+            </ProtectedDashboardRoute>
+          }
+        />
+        <Route
+          path="society-management"
+          element={
+            <ProtectedSocietyRoute>
+              <SocietyManagement />
+            </ProtectedSocietyRoute>
+          }
+        />
         
         {/* Building Settings Routes */}
         <Route path="building-settings/building-details" element={<BuildingDetailsPage />} />
@@ -120,8 +142,6 @@ export const AppRoutes = () => {
         <Route path="building-settings/notice-board" element={<NoticeBoardPage />} />
         <Route path="building-settings/amenities" element={<AmenitiesPage />} />
         <Route path="building-settings/parking" element={<ParkingPage />} />
-        <Route path="building-settings/amenities" element={<AmenitiesPage />} />
-        <Route path="building-settings/parking" element={<ParkingPage />} />
         
         {/* Legacy routes for backward compatibility - redirect to new paths */}
         <Route path="building-details" element={<Navigate to="/building-settings/building-details" replace />} />
@@ -129,8 +149,6 @@ export const AppRoutes = () => {
         <Route path="blocks" element={<Navigate to="/building-settings/blocks" replace />} />
         <Route path="units" element={<Navigate to="/building-settings/units" replace />} />
         <Route path="notice-board" element={<Navigate to="/building-settings/notice-board" replace />} />
-        <Route path="amenities" element={<Navigate to="/building-settings/amenities" replace />} />
-        <Route path="parking" element={<Navigate to="/building-settings/parking" replace />} />
         <Route path="amenities" element={<Navigate to="/building-settings/amenities" replace />} />
         <Route path="parking" element={<Navigate to="/building-settings/parking" replace />} />
         
