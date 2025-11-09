@@ -12,6 +12,8 @@ import { UnitsPage } from '../pages/building-details/UnitsPage';
 import { NoticeBoardPage } from '../pages/building-details/NoticeBoardPage';
 import { AmenitiesPage } from '../pages/building-details/AmenitiesPage';
 import { ParkingPage } from '../pages/building-details/ParkingPage';
+import { AmenitiesPage } from '../pages/building-details/AmenitiesPage';
+import { ParkingPage } from '../pages/building-details/ParkingPage';
 import SocietyManagement from '../pages/society-management/SocietyManagement';
 
 /* current user roles */
@@ -120,6 +122,8 @@ export const AppRoutes = () => {
         <Route path="building-settings/notice-board" element={<NoticeBoardPage />} />
         <Route path="building-settings/amenities" element={<AmenitiesPage />} />
         <Route path="building-settings/parking" element={<ParkingPage />} />
+        <Route path="building-settings/amenities" element={<AmenitiesPage />} />
+        <Route path="building-settings/parking" element={<ParkingPage />} />
         
         {/* Legacy routes for backward compatibility - redirect to new paths */}
         <Route path="building-details" element={<Navigate to="/building-settings/building-details" replace />} />
@@ -127,6 +131,8 @@ export const AppRoutes = () => {
         <Route path="blocks" element={<Navigate to="/building-settings/blocks" replace />} />
         <Route path="units" element={<Navigate to="/building-settings/units" replace />} />
         <Route path="notice-board" element={<Navigate to="/building-settings/notice-board" replace />} />
+        <Route path="amenities" element={<Navigate to="/building-settings/amenities" replace />} />
+        <Route path="parking" element={<Navigate to="/building-settings/parking" replace />} />
         <Route path="amenities" element={<Navigate to="/building-settings/amenities" replace />} />
         <Route path="parking" element={<Navigate to="/building-settings/parking" replace />} />
         

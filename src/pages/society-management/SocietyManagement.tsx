@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as Yup from 'yup';
+import { useDispatch, useSelector } from 'react-redux';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,13 +28,16 @@ import {
   IconCalendar,
   IconCheck,
   IconPlus,
-  IconX
+  IconX,
+  IconUser
 } from '@tabler/icons-react';
-import { Society } from '@/types/SocietyTypes';
+import { Society, AddSocietyPayload } from '@/types/SocietyTypes';
 import { dummySocieties } from '@/data/dummySocieties';
 import { setToLocalStorage, getFromLocalStorage } from '@/utils/localstorage';
 import { showMessage } from '@/utils/Constant';
 import { societySchema } from '@/utils/validationSchemas/societySchema';
+import { addSociety, resetAddSociety } from '@/store/slices/societySlice';
+import { AppDispatch, RootState } from '@/store/store';
 
 // Extended interface for additional details
 interface SocietyDetails extends Society {
@@ -49,29 +53,38 @@ type SocietyFormData = Yup.InferType<typeof societySchema>;
 
 const SocietyManagement = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch<AppDispatch>();
   const [societies, setSocieties] = useState<Society[]>(dummySocieties);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSociety, setSelectedSociety] = useState<SocietyDetails | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [currentSelectedSociety, setCurrentSelectedSociety] = useState<Society | null>(null);
+  const [projectOption, setProjectOption] = useState<'select' | 'create'>('select');
+  const [projectId, setProjectId] = useState<string>('');
+
+  // Get Redux state
+  const { status: addSocietyStatus, error: addSocietyError } = useSelector((state: RootState) => state.society);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
-  } = useForm<SocietyFormData>({
+      } = useForm<SocietyFormData>({
     resolver: yupResolver(societySchema),
     defaultValues: {
+      projectId: '',
       name: '',
+      territory: '',
       address: '',
-      city: '',
-      state: '',
-      pincode: '',
-      country: 'India',
-      contactNumber: '',
-      email: '',
+      manager: {
+        firstName: '',
+        lastName: '',
+        countryCode: '+91',
+        mobileNumber: '',
+        email: '',
+      },
     },
   });
 
@@ -84,6 +97,23 @@ const SocietyManagement = () => {
       setCurrentSelectedSociety(storedSociety);
     }
   }, []);
+
+  // Handle add society success/error
+  useEffect(() => {
+    if (addSocietyStatus === 'complete') {
+      showMessage('Society created successfully! Manager invitation sent.', 'success');
+      setIsAddDialogOpen(false);
+      reset();
+      setProjectId('');
+      setProjectOption('select');
+      dispatch(resetAddSociety());
+      // Optionally refresh societies list
+      // dispatch(getSocieties());
+    } else if (addSocietyStatus === 'failed') {
+      showMessage(addSocietyError || 'Failed to create society', 'error');
+      dispatch(resetAddSociety());
+    }
+  }, [addSocietyStatus, addSocietyError, dispatch, reset]);
 
   const handleSocietyClick = (society: Society) => {
     // Generate additional details for the selected society
@@ -117,32 +147,33 @@ const SocietyManagement = () => {
   const handleAddNewSociety = () => {
     setIsAddDialogOpen(true);
     reset();
+    setProjectId('');
+    setProjectOption('select');
   };
 
   const onSubmitSociety = (data: SocietyFormData) => {
-    // Generate a new ID for the society
-    const maxId = societies.length > 0 
-      ? Math.max(...societies.map(s => Number(s.id) || 0))
-      : 0;
-    const newId = String(maxId + 1);
-    
-    const newSociety: Society = {
-      id: newId,
+    // Prepare payload according to backend API structure
+    // mobileNumber and countryCode are required to avoid MongoDB duplicate key error on null
+    const payload: AddSocietyPayload = {
       name: data.name.trim(),
+      territory: data.territory?.trim() || '',
       address: data.address?.trim() || '',
-      city: data.city?.trim() || '',
-      state: data.state?.trim() || '',
-      pincode: data.pincode?.trim() || '',
-      country: data.country?.trim() || 'India',
-      contactNumber: data.contactNumber?.trim() || '',
-      email: data.email?.trim() || '',
+      manager: {
+        firstName: data.manager.firstName.trim(),
+        lastName: data.manager.lastName?.trim() || '',
+        countryCode: data.manager.countryCode?.trim() || '+91',
+        mobileNumber: data.manager.mobileNumber.trim(),
+        email: data.manager.email.trim().toLowerCase(),
+      },
     };
 
-    // Add to societies list
-    setSocieties([...societies, newSociety]);
-    setIsAddDialogOpen(false);
-    reset();
-    showMessage(`Society "${newSociety.name}" added successfully!`, 'success');
+    // Add projectId if provided (and not creating new)
+    if (projectOption === 'select' && projectId) {
+      payload.projectId = projectId;
+    }
+
+    // Dispatch Redux action to create society
+    dispatch(addSociety(payload));
   };
 
   const filteredSocieties = societies.filter((society) =>
@@ -545,6 +576,62 @@ const SocietyManagement = () => {
           </DialogHeader>
 
           <form onSubmit={handleSubmit(onSubmitSociety)} className="space-y-6 mt-4">
+            {/* Project Selection */}
+            <div>
+              <h3 className="text-lg font-semibold text-primary-black mb-4">Project Selection</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Project Option
+                  </label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="projectOption"
+                        value="select"
+                        checked={projectOption === 'select'}
+                        onChange={(e) => setProjectOption(e.target.value as 'select' | 'create')}
+                        className="mr-2"
+                      />
+                      <span>Select Existing Project</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="projectOption"
+                        value="create"
+                        checked={projectOption === 'create'}
+                        onChange={(e) => setProjectOption(e.target.value as 'select' | 'create')}
+                        className="mr-2"
+                      />
+                      <span>Create New Project</span>
+                    </label>
+                  </div>
+                </div>
+                {projectOption === 'select' && (
+                  <div className="md:col-span-2">
+                    <label htmlFor="projectId" className="block text-sm font-medium text-gray-700 mb-1">
+                      Project ID
+                    </label>
+                    <input
+                      type="text"
+                      id="projectId"
+                      value={projectId}
+                      onChange={(e) => setProjectId(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-black focus:border-transparent"
+                      placeholder="Enter project ID (optional)"
+                    />
+                  </div>
+                )}
+                {projectOption === 'create' && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-600">Society will be created without a project association.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Basic Information */}
             <div>
               <h3 className="text-lg font-semibold text-primary-black mb-4">Basic Information</h3>
@@ -566,129 +653,133 @@ const SocietyManagement = () => {
                   )}
                 </div>
 
-                {/* Contact Number */}
+                {/* Territory */}
                 <div>
-                  <label htmlFor="contactNumber" className="block text-sm font-medium text-gray-700 mb-1">
-                    Contact Number
+                  <label htmlFor="territory" className="block text-sm font-medium text-gray-700 mb-1">
+                    Territory
                   </label>
                   <input
                     type="text"
-                    id="contactNumber"
-                    {...register('contactNumber')}
+                    id="territory"
+                    {...register('territory')}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-black focus:border-transparent"
-                    placeholder="+91 98765 43210"
+                    placeholder="Enter territory"
                   />
-                  {errors.contactNumber && (
-                    <p className="mt-1 text-sm text-red-500">{errors.contactNumber.message}</p>
+                  {errors.territory && (
+                    <p className="mt-1 text-sm text-red-500">{errors.territory.message}</p>
                   )}
                 </div>
 
-                {/* Email */}
-                <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    id="email"
-                    {...register('email')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-black focus:border-transparent"
-                    placeholder="society@example.com"
-                  />
-                  {errors.email && (
-                    <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
-                  )}
-                </div>
-
-                {/* Country */}
-                <div>
-                  <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-1">
-                    Country
-                  </label>
-                  <input
-                    type="text"
-                    id="country"
-                    {...register('country')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-black focus:border-transparent"
-                    placeholder="India"
-                  />
-                  {errors.country && (
-                    <p className="mt-1 text-sm text-red-500">{errors.country.message}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Address Information */}
-            <div>
-              <h3 className="text-lg font-semibold text-primary-black mb-4">Address Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Address - Full Width */}
                 <div className="md:col-span-2">
                   <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
                     Address
                   </label>
-                  <input
-                    type="text"
+                  <textarea
                     id="address"
                     {...register('address')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-black focus:border-transparent"
-                    placeholder="Enter full address"
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-black focus:border-transparent resize-y"
+                    placeholder="Enter complete address"
                   />
                   {errors.address && (
                     <p className="mt-1 text-sm text-red-500">{errors.address.message}</p>
                   )}
                 </div>
+              </div>
+            </div>
 
-                {/* City */}
+            {/* Society Admin Manager Information */}
+            <div>
+              <h3 className="text-lg font-semibold text-primary-black mb-4 flex items-center gap-2">
+                <IconUser className="w-5 h-5" />
+                Society Admin Manager
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* First Name */}
                 <div>
-                  <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
-                    City
+                  <label htmlFor="manager.firstName" className="block text-sm font-medium text-gray-700 mb-1">
+                    First Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
-                    id="city"
-                    {...register('city')}
+                    id="manager.firstName"
+                    {...register('manager.firstName')}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-black focus:border-transparent"
-                    placeholder="Enter city"
+                    placeholder="Enter first name"
                   />
-                  {errors.city && (
-                    <p className="mt-1 text-sm text-red-500">{errors.city.message}</p>
+                  {errors.manager?.firstName && (
+                    <p className="mt-1 text-sm text-red-500">{errors.manager.firstName.message}</p>
                   )}
                 </div>
 
-                {/* State */}
+                {/* Last Name */}
                 <div>
-                  <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-1">
-                    State
+                  <label htmlFor="manager.lastName" className="block text-sm font-medium text-gray-700 mb-1">
+                    Last Name
                   </label>
                   <input
                     type="text"
-                    id="state"
-                    {...register('state')}
+                    id="manager.lastName"
+                    {...register('manager.lastName')}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-black focus:border-transparent"
-                    placeholder="Enter state"
+                    placeholder="Enter last name"
                   />
-                  {errors.state && (
-                    <p className="mt-1 text-sm text-red-500">{errors.state.message}</p>
+                  {errors.manager?.lastName && (
+                    <p className="mt-1 text-sm text-red-500">{errors.manager.lastName.message}</p>
                   )}
                 </div>
 
-                {/* Pincode */}
-                <div>
-                  <label htmlFor="pincode" className="block text-sm font-medium text-gray-700 mb-1">
-                    Pincode
+                {/* Country Code + Mobile Number */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Country Code + Mobile Number <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="w-32">
+                      <input
+                        type="text"
+                        id="manager.countryCode"
+                        {...register('manager.countryCode')}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-black focus:border-transparent"
+                        placeholder="+91"
+                        required
+                      />
+                      {errors.manager?.countryCode && (
+                        <p className="mt-1 text-sm text-red-500">{errors.manager.countryCode.message}</p>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        id="manager.mobileNumber"
+                        {...register('manager.mobileNumber')}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-black focus:border-transparent"
+                        placeholder="9876543210"
+                        required
+                      />
+                      {errors.manager?.mobileNumber && (
+                        <p className="mt-1 text-sm text-red-500">{errors.manager.mobileNumber.message}</p>
+                      )}
+                    </div>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">Required to avoid duplicate key errors in database</p>
+                </div>
+
+                {/* Email Address */}
+                <div className="md:col-span-2">
+                  <label htmlFor="manager.email" className="block text-sm font-medium text-gray-700 mb-1">
+                    Email Address <span className="text-red-500">*</span>
                   </label>
                   <input
-                    type="text"
-                    id="pincode"
-                    {...register('pincode')}
+                    type="email"
+                    id="manager.email"
+                    {...register('manager.email')}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-black focus:border-transparent"
-                    placeholder="123456"
-                    maxLength={6}
+                    placeholder="manager@example.com"
                   />
-                  {errors.pincode && (
-                    <p className="mt-1 text-sm text-red-500">{errors.pincode.message}</p>
+                  {errors.manager?.email && (
+                    <p className="mt-1 text-sm text-red-500">{errors.manager.email.message}</p>
                   )}
                 </div>
               </div>
@@ -699,9 +790,16 @@ const SocietyManagement = () => {
               <Button 
                 type="submit"
                 className="flex-[2] bg-primary-black text-white hover:bg-gray-800"
+                disabled={addSocietyStatus === 'loading'}
               >
-                <IconCheck className="w-4 h-4 mr-2" />
-                Add Society
+                {addSocietyStatus === 'loading' ? (
+                  <>Loading...</>
+                ) : (
+                  <>
+                    <IconCheck className="w-4 h-4 mr-2" />
+                    Create Society & Manage Society
+                  </>
+                )}
               </Button>
               <Button 
                 type="button"
@@ -710,7 +808,10 @@ const SocietyManagement = () => {
                 onClick={() => {
                   setIsAddDialogOpen(false);
                   reset();
+                  setProjectId('');
+                  setProjectOption('select');
                 }}
+                disabled={addSocietyStatus === 'loading'}
               >
                 <IconX className="w-4 h-4 mr-2" />
                 Cancel
@@ -722,5 +823,8 @@ const SocietyManagement = () => {
     </div>
   );
 };
+  );
+};
 
+export default SocietyManagement;
 export default SocietyManagement;

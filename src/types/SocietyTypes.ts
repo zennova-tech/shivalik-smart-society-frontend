@@ -18,15 +18,20 @@ export interface GetSocietiesPayload {
     [key: string]: any;
 }
 
+export interface ManagerInfo {
+    firstName: string;
+    lastName?: string;
+    countryCode?: string;
+    mobileNumber?: string;
+    email: string;
+}
+
 export interface AddSocietyPayload {
+    projectId?: string;
     name: string;
+    territory?: string;
     address?: string;
-    city?: string;
-    state?: string;
-    pincode?: string;
-    country?: string;
-    contactNumber?: string;
-    email?: string;
+    manager: ManagerInfo;
     [key: string]: any;
 }
 
