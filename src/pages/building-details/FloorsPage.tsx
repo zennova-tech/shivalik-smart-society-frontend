@@ -13,12 +13,14 @@ import {
   updateFloorApi,
   deleteFloorApi,
   Floor,
+  FloorResponse,
   GetFloorsParams,
   AddFloorPayload,
   UpdateFloorPayload,
 } from '../../apis/floor';
 import { getBlocksBySocietyApi, Block } from '../../apis/block';
 import { getUnitsApi } from '../../apis/unit';
+import { getSocietyId } from '../../utils/societyUtils';
 import { showMessage } from '../../utils/Constant';
 
 type FloorsFormData = Yup.InferType<typeof floorsSchema>;
@@ -50,9 +52,15 @@ export const FloorsPage = () => {
 
   useEffect(() => {
     document.title = 'Floors - Smart Society';
-    fetchBlocks();
-    fetchFloors();
-    fetchUnitsCount();
+    // Fetch blocks first to ensure they're available for the form
+    fetchBlocks().then(() => {
+      fetchFloors();
+    });
+    // Fetch units count in background (don't block UI)
+    fetchUnitsCount().catch(err => {
+      console.error('Error fetching units count:', err);
+      // Silently fail - not critical for UI
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -74,19 +82,22 @@ export const FloorsPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, selectedFilters]);
 
-  const fetchBlocks = async () => {
+  const fetchBlocks = async (): Promise<void> => {
     try {
       setLoadingBlocks(true);
       const response = await getBlocksBySocietyApi({ limit: 500, status: 'active' });
+      // Ensure all block IDs are normalized to strings
       const blocks = (response.items || []).map((block: Block) => ({
-        value: block._id,
+        value: String(block._id).trim(), // Normalize to string and trim
         label: block.name || 'Unnamed Block',
       }));
       setBlockOptions(blocks);
+      return Promise.resolve();
     } catch (error: any) {
       console.error('Error fetching blocks:', error);
       showMessage('Failed to fetch blocks', 'error');
       setBlockOptions([]);
+      return Promise.reject(error);
     } finally {
       setLoadingBlocks(false);
     }
@@ -94,8 +105,9 @@ export const FloorsPage = () => {
 
   const fetchUnitsCount = async () => {
     try {
-      // Fetch all units to count them per floor
-      const response = await getUnitsApi({ limit: 10000 });
+      // Fetch units with a reasonable limit and pagination if needed
+      // Don't block the UI with a huge query
+      const response = await getUnitsApi({ limit: 500, page: 1 });
       const units = response.items || [];
       const countMap: Record<string, number> = {};
       
@@ -110,6 +122,7 @@ export const FloorsPage = () => {
     } catch (error: any) {
       console.error('Error fetching units count:', error);
       // Don't show error to user, just continue without unit counts
+      setUnitsCountMap({});
     }
   };
 
@@ -124,12 +137,38 @@ export const FloorsPage = () => {
         status: selectedFilters.status || undefined,
       };
 
-      const response = await getFloorsApi(params);
+      // Add timeout to prevent hanging
+      const response = await Promise.race([
+        getFloorsApi(params),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout')), 30000)
+        )
+      ]) as FloorResponse;
+      
       const floorsWithUnits: FloorWithUnits[] = (response.items || []).map((floor: Floor) => {
-        const blockName = typeof floor.block === 'object' && floor.block ? floor.block.name : '';
+        // Extract block name and ensure block ID is preserved as normalized string
+        let blockName = '';
+        let blockId: string = '';
+        if (floor.block) {
+          if (typeof floor.block === 'string') {
+            blockId = String(floor.block).trim();
+            // Try to find block name from blockOptions first, then from populated block
+            const blockOption = blockOptions.find(b => String(b.value).trim() === blockId);
+            blockName = blockOption?.label || '';
+          } else if (typeof floor.block === 'object' && floor.block !== null) {
+            blockId = String((floor.block as any)?._id || (floor.block as any)?.id || '').trim();
+            blockName = (floor.block as any)?.name || '';
+            // If blockName is empty, try to find it from blockOptions
+            if (!blockName && blockId) {
+              const blockOption = blockOptions.find(b => String(b.value).trim() === blockId);
+              blockName = blockOption?.label || '';
+            }
+          }
+        }
         const totalUnits = unitsCountMap[floor._id] || 0;
         return {
           ...floor,
+          block: blockId, // Always store block as normalized string ID for consistency
           blockName,
           totalUnits,
         };
@@ -139,7 +178,11 @@ export const FloorsPage = () => {
       setTotal(response.total || 0);
     } catch (error: any) {
       console.error('Error fetching floors:', error);
-      showMessage('Failed to fetch floors', 'error');
+      if (error.message !== 'Request timeout') {
+        showMessage('Failed to fetch floors', 'error');
+      } else {
+        showMessage('Request timed out. Please try again.', 'error');
+      }
       setFloors([]);
     } finally {
       setLoading(false);
@@ -163,29 +206,84 @@ export const FloorsPage = () => {
     },
   });
 
+  // Effect to update blockId in form when editingFloor changes and blockOptions are available
+  useEffect(() => {
+    if (editingFloor && showForm && blockOptions.length > 0) {
+      // Extract block ID from editing floor and normalize to string
+      let blockId = '';
+      if (editingFloor.block) {
+        if (typeof editingFloor.block === 'string') {
+          blockId = String(editingFloor.block).trim();
+        } else if (typeof editingFloor.block === 'object' && editingFloor.block !== null) {
+          blockId = String((editingFloor.block as any)?._id || (editingFloor.block as any)?.id || '').trim();
+        }
+      }
+      
+      // Only set if we have a valid blockId and it exists in blockOptions
+      // Compare as strings to handle ObjectId vs string mismatches
+      if (blockId) {
+        const blockExists = blockOptions.some(opt => String(opt.value).trim() === blockId);
+        if (blockExists) {
+          console.log('Setting blockId via useEffect:', blockId, 'matching option:', blockOptions.find(opt => String(opt.value).trim() === blockId));
+          setValue('blockId', blockId, { shouldValidate: true });
+        } else {
+          console.warn('Block ID not found in blockOptions:', blockId, 'Available options:', blockOptions.map(b => b.value));
+          // Try to find by converting both to strings for comparison
+          const matchingOption = blockOptions.find(opt => {
+            const optValue = String(opt.value).trim();
+            const floorBlockId = blockId.trim();
+            return optValue === floorBlockId || optValue.includes(floorBlockId) || floorBlockId.includes(optValue);
+          });
+          if (matchingOption) {
+            console.log('Found matching block by fuzzy match:', matchingOption.value);
+            setValue('blockId', matchingOption.value, { shouldValidate: true });
+          }
+        }
+      }
+    }
+  }, [editingFloor, showForm, blockOptions, setValue]);
+
   const onSubmit = async (data: FloorsFormData) => {
     try {
       setSubmitting(true);
       
+      // Get society ID to send to backend
+      const societyId = getSocietyId();
+      
       if (editingFloor) {
-        // Update existing floor
+        // Extract building ID from editing floor (most reliable source)
+        let buildingIdFromFloor = '';
+        if (editingFloor.building) {
+          if (typeof editingFloor.building === 'string') {
+            buildingIdFromFloor = editingFloor.building;
+          } else if (typeof editingFloor.building === 'object' && editingFloor.building !== null) {
+            buildingIdFromFloor = (editingFloor.building as any)?._id || (editingFloor.building as any)?.id || '';
+          }
+        }
+        
+        // Update existing floor - send name, number, block, status, and societyId
+        // Backend will silently preserve/use building ID from existing floor or get from block/society
         const updatePayload: UpdateFloorPayload = {
           id: editingFloor._id,
           name: data.floorName,
           number: data.floorNumber,
           block: data.blockId,
           status: data.status,
-        };
+          building: buildingIdFromFloor || undefined, // Include if available
+          societyId: societyId || undefined, // Always send society ID so backend can get building if needed
+        } as any;
+        
         await updateFloorApi(updatePayload);
         showMessage('Floor updated successfully!', 'success');
       } else {
-        // Add new floor
+        // Add new floor - backend will automatically get building from block or society
         const addPayload: AddFloorPayload = {
           name: data.floorName,
           number: data.floorNumber,
           block: data.blockId,
           status: data.status || 'active',
-        };
+          societyId: societyId || undefined, // Send society ID so backend can get building
+        } as any;
         await addFloorApi(addPayload);
         showMessage('Floor added successfully!', 'success');
       }
@@ -206,16 +304,118 @@ export const FloorsPage = () => {
 
   const handleEdit = async (floor: FloorWithUnits) => {
     try {
-      const fullFloor = await getFloorByIdApi(floor._id);
-      setEditingFloor(fullFloor);
-      setValue('floorNumber', fullFloor.number);
-      setValue('floorName', fullFloor.name);
-      setValue('blockId', typeof fullFloor.block === 'string' ? fullFloor.block : fullFloor.block?._id || '');
-      setValue('status', fullFloor.status || 'active');
+      // Ensure blocks are loaded first (critical for block dropdown to work)
+      if (blockOptions.length === 0) {
+        await fetchBlocks();
+      }
+      
+      // Extract block ID from floor - FloorWithUnits should have block as string ID
+      // But handle both cases for safety, and normalize to string
+      let blockId = '';
+      if (floor.block) {
+        if (typeof floor.block === 'string') {
+          blockId = String(floor.block).trim();
+        } else if (typeof floor.block === 'object' && floor.block !== null) {
+          blockId = String((floor.block as any)?._id || (floor.block as any)?.id || '').trim();
+        }
+      }
+      
+      console.log('Editing floor - blockId:', blockId, 'blockOptions:', blockOptions.length, 'blockOptions values:', blockOptions.map(b => b.value));
+      
+      // Show form immediately with existing data
+      setEditingFloor(floor);
+      setValue('floorNumber', floor.number, { shouldValidate: false });
+      setValue('floorName', floor.name, { shouldValidate: false });
+      setValue('status', floor.status || 'active', { shouldValidate: false });
+      
+      // Set blockId immediately if we have it and blockOptions are loaded
+      // Compare as strings to handle ObjectId vs string mismatches
+      if (blockId && blockOptions.length > 0) {
+        const blockExists = blockOptions.some(opt => String(opt.value).trim() === blockId);
+        if (blockExists) {
+          console.log('Setting blockId immediately:', blockId);
+          setValue('blockId', blockId, { shouldValidate: true });
+        } else {
+          console.warn('Block ID not found in options:', blockId, 'Available:', blockOptions.map(b => b.value));
+          // Try fuzzy match
+          const matchingOption = blockOptions.find(opt => {
+            const optValue = String(opt.value).trim();
+            return optValue === blockId || optValue.includes(blockId) || blockId.includes(optValue);
+          });
+          if (matchingOption) {
+            console.log('Found matching block by fuzzy match:', matchingOption.value);
+            setValue('blockId', matchingOption.value, { shouldValidate: true });
+          }
+        }
+      }
+      
       setShowForm(true);
+      
+      // Fetch full details in background (with timeout)
+      try {
+        const fullFloor = await Promise.race([
+          getFloorByIdApi(floor._id),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), 10000)
+          )
+        ]) as Floor;
+        
+        // Extract block ID from full floor details and normalize to string
+        let fullBlockId = '';
+        if (fullFloor.block) {
+          if (typeof fullFloor.block === 'string') {
+            fullBlockId = String(fullFloor.block).trim();
+          } else if (typeof fullFloor.block === 'object' && fullFloor.block !== null) {
+            fullBlockId = String((fullFloor.block as any)?._id || (fullFloor.block as any)?.id || '').trim();
+          }
+        }
+        
+        // Update with full details if fetch succeeds
+        setEditingFloor(fullFloor);
+        setValue('floorNumber', fullFloor.number);
+        setValue('floorName', fullFloor.name);
+        setValue('status', fullFloor.status || 'active');
+        
+        // Update blockId if we got a valid one from the API
+        // Compare as strings to handle ObjectId vs string mismatches
+        if (fullBlockId) {
+          console.log('Updating blockId from API:', fullBlockId);
+          const blockExists = blockOptions.some(opt => String(opt.value).trim() === fullBlockId);
+          if (blockExists) {
+            setValue('blockId', fullBlockId, { shouldValidate: true });
+          } else {
+            console.warn('Block from API not found in options:', fullBlockId);
+            // Try fuzzy match
+            const matchingOption = blockOptions.find(opt => {
+              const optValue = String(opt.value).trim();
+              return optValue === fullBlockId || optValue.includes(fullBlockId) || fullBlockId.includes(optValue);
+            });
+            if (matchingOption) {
+              console.log('Found matching block by fuzzy match:', matchingOption.value);
+              setValue('blockId', matchingOption.value, { shouldValidate: true });
+            } else if (blockId) {
+              // Fallback to the original blockId
+              const originalExists = blockOptions.some(opt => String(opt.value).trim() === blockId);
+              if (originalExists) {
+                setValue('blockId', blockId, { shouldValidate: true });
+              }
+            }
+          }
+        } else if (blockId) {
+          // Fallback to the original blockId
+          const blockExists = blockOptions.some(opt => String(opt.value).trim() === blockId);
+          if (blockExists) {
+            setValue('blockId', blockId, { shouldValidate: true });
+          }
+        }
+      } catch (fetchError: any) {
+        console.warn('Could not fetch full floor details, using existing data:', fetchError);
+        // Continue with existing floor data - don't block the form
+        // The useEffect will handle setting blockId when blockOptions are ready
+      }
     } catch (error: any) {
-      console.error('Error fetching floor details:', error);
-      showMessage('Failed to fetch floor details', 'error');
+      console.error('Error opening floor for edit:', error);
+      showMessage('Failed to open floor for editing', 'error');
     }
   };
 
@@ -319,7 +519,8 @@ export const FloorsPage = () => {
     setPage(1); // Reset to first page when filter changes
   };
 
-  if (loading && floors.length === 0) {
+  // Only show loading screen on initial load, allow form to show even if loading
+  if (loading && floors.length === 0 && !showForm) {
     return (
       <div className="min-h-screen bg-[#f9fafb] flex items-center justify-center">
         <div className="text-lg text-gray-600">Loading floors...</div>
@@ -333,24 +534,167 @@ export const FloorsPage = () => {
         {/* Page Header */}
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-3xl font-bold text-primary-black">Floors</h1>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                setShowForm(true);
-                setEditingFloor(null);
-                reset({
-                  floorNumber: 0,
-                  floorName: '',
-                  blockId: '',
-                  status: 'active',
-                });
-              }}
-              className="px-4 py-2 text-sm font-medium text-white bg-primary-black rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
-            >
-              Add Floor
-            </button>
-          </div>
+          {/* Only show Add Floor button when not in edit mode */}
+          {!showForm && (
+            <div className="flex gap-2">
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setEditingFloor(null);
+                  reset({
+                    floorNumber: 0,
+                    floorName: '',
+                    blockId: '',
+                    status: 'active',
+                  });
+                  setShowForm(true);
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-black rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
+              >
+                Add Floor
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Add/Edit Form - Show first if form is open */}
+        {showForm && (
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            className="bg-white rounded-lg border border-gray-200 p-6 lg:p-8 mb-6"
+          >
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-primary-black">
+                {editingFloor ? 'Edit Floor' : 'Add New Floor'}
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingFloor(null);
+                  reset({
+                    floorNumber: 0,
+                    floorName: '',
+                    blockId: '',
+                    status: 'active',
+                  });
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Floor Information Section */}
+            <div className="mb-8">
+              <h3 className="text-lg font-semibold text-primary-black mb-6">Floor Information</h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Floor Number */}
+                <div>
+                  <label htmlFor="floorNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                    Floor Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    id="floorNumber"
+                    {...register('floorNumber', { valueAsNumber: true })}
+                    min="0"
+                    className="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-gray-900 focus:ring-0 bg-transparent"
+                    placeholder="Enter floor number"
+                  />
+                  {errors.floorNumber && (
+                    <p className="mt-1 text-sm text-red-500">{errors.floorNumber.message as string}</p>
+                  )}
+                </div>
+
+                {/* Floor Name */}
+                <div>
+                  <label htmlFor="floorName" className="block text-sm font-medium text-gray-700 mb-1">
+                    Floor Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="floorName"
+                    {...register('floorName')}
+                    className="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-gray-900 focus:ring-0 bg-transparent"
+                    placeholder="Enter floor name (e.g., Ground Floor, First Floor)"
+                  />
+                  {errors.floorName && (
+                    <p className="mt-1 text-sm text-red-500">{errors.floorName.message as string}</p>
+                  )}
+                </div>
+
+                {/* Block */}
+                <div>
+                  <label htmlFor="blockId" className="block text-sm font-medium text-gray-700 mb-1">
+                    Block <span className="text-red-500">*</span>
+                  </label>
+                  <CustomSelect
+                    id="blockId"
+                    name="blockId"
+                    value={watch('blockId') || ''}
+                    onChange={(value) => setValue('blockId', value, { shouldValidate: true })}
+                    options={[{ value: '', label: 'Select Block' }, ...blockOptions]}
+                    placeholder={loadingBlocks ? 'Loading blocks...' : 'Select block'}
+                    error={errors.blockId?.message as string}
+                    disabled={loadingBlocks}
+                    required
+                  />
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+                    Status <span className="text-red-500">*</span>
+                  </label>
+                  <CustomSelect
+                    id="status"
+                    name="status"
+                    value={watch('status') || 'active'}
+                    onChange={(value) => setValue('status', value, { shouldValidate: true })}
+                    options={statusOptions}
+                    placeholder="Select status"
+                    error={errors.status?.message as string}
+                    disabled={false}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Form Actions */}
+            <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => {
+                  reset({
+                    floorNumber: 0,
+                    floorName: '',
+                    blockId: '',
+                    status: 'active',
+                  });
+                  setShowForm(false);
+                  setEditingFloor(null);
+                }}
+                className="px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-6 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? 'Saving...' : editingFloor ? 'Update Floor' : 'Save Floor'}
+              </button>
+            </div>
+          </form>
+        )}
 
         {/* Data Table */}
         {!showForm && (
@@ -454,139 +798,6 @@ export const FloorsPage = () => {
               </div>
             )}
           </div>
-        )}
-
-        {/* Add/Edit Form */}
-        {showForm && (
-          <form
-            onSubmit={handleSubmit(onSubmit)}
-            className="bg-white rounded-lg border border-gray-200 p-6 lg:p-8"
-          >
-            <div className="mb-6 flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-primary-black">
-                {editingFloor ? 'Edit Floor' : 'Add New Floor'}
-              </h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditingFloor(null);
-                  reset();
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Floor Information Section */}
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-primary-black mb-6">Floor Information</h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Floor Number */}
-                <div>
-                  <label htmlFor="floorNumber" className="block text-sm font-medium text-gray-700 mb-1">
-                    Floor Number <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    id="floorNumber"
-                    {...register('floorNumber', { valueAsNumber: true })}
-                    min="0"
-                    className="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-gray-900 focus:ring-0 bg-transparent"
-                    placeholder="Enter floor number"
-                  />
-                  {errors.floorNumber && (
-                    <p className="mt-1 text-sm text-red-500">{errors.floorNumber.message as string}</p>
-                  )}
-                </div>
-
-                {/* Floor Name */}
-                <div>
-                  <label htmlFor="floorName" className="block text-sm font-medium text-gray-700 mb-1">
-                    Floor Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="floorName"
-                    {...register('floorName')}
-                    className="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-gray-900 focus:ring-0 bg-transparent"
-                    placeholder="Enter floor name (e.g., Ground Floor, First Floor)"
-                  />
-                  {errors.floorName && (
-                    <p className="mt-1 text-sm text-red-500">{errors.floorName.message as string}</p>
-                  )}
-                </div>
-
-                {/* Block */}
-                <div>
-                  <label htmlFor="blockId" className="block text-sm font-medium text-gray-700 mb-1">
-                    Block <span className="text-red-500">*</span>
-                  </label>
-                  <CustomSelect
-                    id="blockId"
-                    name="blockId"
-                    value={watch('blockId') || ''}
-                    onChange={(value) => setValue('blockId', value, { shouldValidate: true })}
-                    options={blockOptions}
-                    placeholder="Select block"
-                    error={errors.blockId?.message as string}
-                    disabled={loadingBlocks}
-                    required
-                  />
-                </div>
-
-                {/* Status */}
-                <div>
-                  <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
-                    Status <span className="text-red-500">*</span>
-                  </label>
-                  <CustomSelect
-                    id="status"
-                    name="status"
-                    value={watch('status') || 'active'}
-                    onChange={(value) => setValue('status', value, { shouldValidate: true })}
-                    options={statusOptions}
-                    placeholder="Select status"
-                    error={errors.status?.message as string}
-                    disabled={false}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Form Actions */}
-            <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => {
-                  reset({
-                    floorNumber: 0,
-                    floorName: '',
-                    blockId: '',
-                    status: 'active',
-                  });
-                  setShowForm(false);
-                  setEditingFloor(null);
-                }}
-                className="px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                disabled={submitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="px-6 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {submitting ? 'Saving...' : editingFloor ? 'Update Floor' : 'Save Floor'}
-              </button>
-            </div>
-          </form>
         )}
       </div>
     </div>

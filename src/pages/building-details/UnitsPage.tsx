@@ -19,6 +19,8 @@ import {
   AddUnitPayload,
   UpdateUnitPayload,
 } from '../../apis/unit';
+import { getBuildingApi } from '../../apis/building';
+import { getSocietyId } from '../../utils/societyUtils';
 import { showMessage } from '../../utils/Constant';
 
 type UnitsFormData = Yup.InferType<typeof unitsSchema>;
@@ -43,8 +45,9 @@ const unitTypeOptions = [
 
 export const UnitsPage = () => {
   const [units, setUnits] = useState<Unit[]>([]);
-  const [blockOptions, setBlockOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [blockOptions, setBlockOptions] = useState<Array<{ value: string; label: string; buildingId?: string }>>([]);
   const [floorOptions, setFloorOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [allFloors, setAllFloors] = useState<Floor[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingBlocks, setLoadingBlocks] = useState(false);
   const [loadingFloors, setLoadingFloors] = useState(false);
@@ -57,11 +60,28 @@ export const UnitsPage = () => {
   const [limit] = useState(20);
   const [submitting, setSubmitting] = useState(false);
   const [selectedBlockId, setSelectedBlockId] = useState<string>('');
+  const [defaultBuildingId, setDefaultBuildingId] = useState<string | null>(null);
+  const [loadingBuilding, setLoadingBuilding] = useState(false);
 
   useEffect(() => {
     document.title = 'Units - Smart Society';
-    fetchBlocks();
+    // Fetch building first, then blocks and floors (so blocks can use building ID)
+    const initializeData = async () => {
+      await fetchDefaultBuilding();
+      await fetchAllFloors();
+      // Blocks will be fetched after building ID is set via the useEffect below
+    };
+    initializeData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fetch blocks when building ID is available to include building ID in block options
+  useEffect(() => {
+    if (defaultBuildingId) {
+      fetchBlocks();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultBuildingId]);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -81,22 +101,66 @@ export const UnitsPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, selectedFilters]);
 
-  useEffect(() => {
-    if (selectedBlockId) {
-      fetchFloors(selectedBlockId);
-    } else {
-      setFloorOptions([]);
+  const fetchDefaultBuilding = async () => {
+    try {
+      setLoadingBuilding(true);
+      const societyId = getSocietyId();
+      if (!societyId) {
+        showMessage('Society ID not found. Please select a society first.', 'error');
+        return;
+      }
+
+      const buildingResponse = await getBuildingApi(societyId);
+      
+      // Handle both single building object and array response
+      let buildings: any[] = [];
+      if (buildingResponse && typeof buildingResponse === 'object') {
+        if (Array.isArray(buildingResponse.items)) {
+          buildings = buildingResponse.items;
+        } else if (buildingResponse._id) {
+          buildings = [buildingResponse];
+        } else if (Array.isArray(buildingResponse)) {
+          buildings = buildingResponse;
+        }
+      }
+
+      // Get the first active building (or first building if no status filter)
+      const activeBuilding = buildings.find((b: any) => b.status === 'active') || buildings[0];
+      
+      if (activeBuilding) {
+        const buildingId = activeBuilding._id || activeBuilding.id;
+        setDefaultBuildingId(buildingId);
+      } else {
+        showMessage('No building found for this society. Please create a building first.', 'error');
+      }
+    } catch (error: any) {
+      console.error('Error fetching building:', error);
+      showMessage('Failed to fetch building. Please ensure a building exists for this society.', 'error');
+    } finally {
+      setLoadingBuilding(false);
     }
-  }, [selectedBlockId]);
+  };
 
   const fetchBlocks = async () => {
     try {
       setLoadingBlocks(true);
       const response = await getBlocksBySocietyApi({ limit: 500, status: 'active' });
-      const blocks = (response.items || []).map((block: Block) => ({
-        value: block._id,
-        label: block.name || 'Unnamed Block',
-      }));
+      const blocks = (response.items || []).map((block: Block) => {
+        // Extract building ID from block
+        let buildingId: string | undefined;
+        if (block.building) {
+          if (typeof block.building === 'string') {
+            buildingId = block.building;
+          } else if (typeof block.building === 'object' && block.building !== null) {
+            buildingId = (block.building as any)?._id || (block.building as any)?.id;
+          }
+        }
+        return {
+          value: block._id,
+          label: block.name || 'Unnamed Block',
+          buildingId: buildingId || defaultBuildingId || undefined,
+        };
+      });
       setBlockOptions(blocks);
     } catch (error: any) {
       console.error('Error fetching blocks:', error);
@@ -107,22 +171,52 @@ export const UnitsPage = () => {
     }
   };
 
-  const fetchFloors = async (blockId: string) => {
+  const fetchAllFloors = async () => {
     try {
       setLoadingFloors(true);
-      const response = await getFloorsApi({ limit: 1000, block: blockId, status: 'active' });
-      const floors = (response.items || []).map((floor: Floor) => ({
-        value: floor._id,
-        label: floor.name || `Floor ${floor.number || ''}`,
-      }));
-      setFloorOptions(floors);
+      // Fetch all floors using main listing API
+      const response = await getFloorsApi({ 
+        page: 1,
+        limit: 500,
+        status: 'active' 
+      });
+      
+      setAllFloors(response?.items || []);
     } catch (error: any) {
-      console.error('Error fetching floors:', error);
-      showMessage('Failed to fetch floors', 'error');
-      setFloorOptions([]);
+      console.error('Error fetching all floors:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch floors';
+      showMessage(errorMessage, 'error');
+      setAllFloors([]);
     } finally {
       setLoadingFloors(false);
     }
+  };
+
+  const filterFloorsByBlock = (blockId: string) => {
+    if (!blockId) {
+      setFloorOptions([]);
+      return;
+    }
+    
+    // Filter floors by selected block ID
+    const filteredFloors = allFloors.filter((floor: Floor) => {
+      if (floor.block) {
+        if (typeof floor.block === 'string') {
+          return floor.block === blockId;
+        } else if (typeof floor.block === 'object' && floor.block !== null) {
+          return (floor.block as any)?._id === blockId;
+        }
+      }
+      return false;
+    });
+    
+    // Map filtered floors to dropdown options
+    const floors = filteredFloors.map((floor: Floor) => ({
+      value: floor._id,
+      label: floor.name || `Floor ${floor.number || ''}`,
+    }));
+    
+    setFloorOptions(floors);
   };
 
   const fetchUnits = async () => {
@@ -171,14 +265,17 @@ export const UnitsPage = () => {
   const watchedBlockId = watch('blockId');
 
   useEffect(() => {
-    if (watchedBlockId) {
+    if (watchedBlockId && watchedBlockId.trim() !== '') {
       setSelectedBlockId(watchedBlockId);
-      setValue('floorId', ''); // Reset floor when block changes
+      setValue('floorId', '');
+      filterFloorsByBlock(watchedBlockId);
     } else {
       setSelectedBlockId('');
       setFloorOptions([]);
+      setValue('floorId', '');
     }
-  }, [watchedBlockId, setValue]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedBlockId, allFloors, setValue]);
 
   const onSubmit = async (data: UnitsFormData) => {
     try {
@@ -229,18 +326,37 @@ export const UnitsPage = () => {
     try {
       const fullUnit = await getUnitByIdApi(unit._id);
       setEditingUnit(fullUnit);
+      
+      // Extract block ID
+      const blockId = typeof fullUnit.block === 'string' 
+        ? fullUnit.block 
+        : (fullUnit.block as any)?._id || '';
+      
+      // Extract floor ID
+      const floorId = typeof fullUnit.floor === 'string' 
+        ? fullUnit.floor 
+        : (fullUnit.floor as any)?._id || '';
+      
+      // Set other fields first (don't depend on block/floor)
       setValue('unitNumber', fullUnit.unitNumber);
-      setValue('blockId', typeof fullUnit.block === 'string' ? fullUnit.block : fullUnit.block?._id || '');
-      setValue('floorId', typeof fullUnit.floor === 'string' ? fullUnit.floor : fullUnit.floor?._id || '');
       setValue('unitType', fullUnit.unitType || '');
       setValue('areaSqFt', fullUnit.areaSqFt || undefined);
       setValue('status', fullUnit.status || 'vacant');
       
-      // Set selected block to fetch floors
-      const blockId = typeof fullUnit.block === 'string' ? fullUnit.block : fullUnit.block?._id || '';
+      // Set block ID - this will trigger the useEffect to filter floors
       if (blockId) {
-        setSelectedBlockId(blockId);
-        await fetchFloors(blockId);
+        setValue('blockId', blockId);
+        // Filter floors for this block
+        filterFloorsByBlock(blockId);
+        // Set floor ID after floors are filtered
+        setTimeout(() => {
+          if (floorId) {
+            setValue('floorId', floorId, { shouldValidate: true });
+          }
+        }, 100);
+      } else {
+        setValue('blockId', '');
+        setValue('floorId', floorId || '');
       }
       
       setShowForm(true);
@@ -606,14 +722,27 @@ export const UnitsPage = () => {
                     value={watch('floorId') || ''}
                     onChange={(value) => setValue('floorId', value, { shouldValidate: true })}
                     options={[
-                      { value: '', label: selectedBlockId ? 'Select Floor' : 'Select Block First' },
+                      { value: '', label: selectedBlockId ? (loadingFloors ? 'Loading floors...' : floorOptions.length === 0 ? 'No floors available' : 'Select Floor') : 'Select Block First' },
                       ...floorOptions,
                     ]}
-                    placeholder={loadingFloors ? 'Loading floors...' : selectedBlockId ? 'Select floor' : 'Select Block First'}
+                    placeholder={
+                      !selectedBlockId 
+                        ? 'Select Block First' 
+                        : loadingFloors 
+                          ? 'Loading floors...' 
+                          : floorOptions.length === 0 
+                            ? 'No floors available' 
+                            : 'Select floor'
+                    }
                     error={errors.floorId?.message as string}
                     disabled={!selectedBlockId || loadingFloors}
                     required
                   />
+                  {selectedBlockId && !loadingFloors && floorOptions.length === 0 && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      No floors found for this block. Please create floors first.
+                    </p>
+                  )}
                 </div>
 
                 {/* Unit Type */}

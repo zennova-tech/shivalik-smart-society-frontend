@@ -19,6 +19,8 @@ import {
   getCommitteeMemberByIdApi,
 } from '@/apis/committeeMember';
 import { getBlocksBySocietyApi, Block } from '@/apis/block';
+import { getBuildingApi } from '@/apis/building';
+import { getSocietyId } from '@/utils/societyUtils';
 import { showMessage } from '@/utils/Constant';
 
 const memberTypeOptions = [
@@ -45,14 +47,18 @@ export const CommitteeMembersPage = () => {
   const [loading, setLoading] = useState(false);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loadingBlocks, setLoadingBlocks] = useState(false);
+  const [defaultBuildingId, setDefaultBuildingId] = useState<string | null>(null);
+  const [loadingBuilding, setLoadingBuilding] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [limit] = useState(20);
 
   useEffect(() => {
     document.title = 'Committee Members - Smart Society';
+    fetchDefaultBuilding();
     fetchBlocks();
     fetchCommitteeMembers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -66,6 +72,46 @@ export const CommitteeMembersPage = () => {
   useEffect(() => {
     fetchCommitteeMembers();
   }, [page, selectedFilters]);
+
+  const fetchDefaultBuilding = async () => {
+    try {
+      setLoadingBuilding(true);
+      const societyId = getSocietyId();
+      if (!societyId) {
+        showMessage('Society ID not found. Please select a society first.', 'error');
+        return;
+      }
+
+      const buildingResponse = await getBuildingApi(societyId);
+      
+      // Handle both single building object and array response
+      let buildings: any[] = [];
+      if (buildingResponse && typeof buildingResponse === 'object') {
+        if (Array.isArray(buildingResponse.items)) {
+          buildings = buildingResponse.items;
+        } else if (buildingResponse._id) {
+          buildings = [buildingResponse];
+        } else if (Array.isArray(buildingResponse)) {
+          buildings = buildingResponse;
+        }
+      }
+
+      // Get the first active building (or first building if no status filter)
+      const activeBuilding = buildings.find((b: any) => b.status === 'active') || buildings[0];
+      
+      if (activeBuilding) {
+        const buildingId = activeBuilding._id || activeBuilding.id;
+        setDefaultBuildingId(buildingId);
+      } else {
+        showMessage('No building found for this society. Please create a building first.', 'error');
+      }
+    } catch (error: any) {
+      console.error('Error fetching building:', error);
+      showMessage('Failed to fetch building. Please ensure a building exists for this society.', 'error');
+    } finally {
+      setLoadingBuilding(false);
+    }
+  };
 
   const fetchBlocks = async () => {
     try {
@@ -119,7 +165,6 @@ export const CommitteeMembersPage = () => {
       email: '',
       memberType: 'member',
       block: '',
-      building: '',
       society: '',
       status: 'active',
     },
@@ -127,12 +172,17 @@ export const CommitteeMembersPage = () => {
 
   const onSubmit = async (data: CommitteeMemberFormData) => {
     try {
+      if (!defaultBuildingId) {
+        showMessage('Building ID not found. Please ensure a building exists for this society.', 'error');
+        return;
+      }
+
       // Clean up empty strings for optional fields
       const cleanData = {
         ...data,
         lastName: data.lastName || undefined,
         block: data.block || undefined,
-        building: data.building || undefined,
+        building: defaultBuildingId, // Always use default building ID
         society: data.society || undefined,
       };
 
@@ -140,6 +190,7 @@ export const CommitteeMembersPage = () => {
         const updatePayload: UpdateCommitteeMemberPayload = {
           id: editingMember._id,
           ...cleanData,
+          building: defaultBuildingId, // Ensure building ID is included
         };
         await updateCommitteeMemberApi(updatePayload);
         showMessage('Committee member updated successfully!', 'success');
@@ -147,9 +198,9 @@ export const CommitteeMembersPage = () => {
         const addPayload: AddCommitteeMemberPayload = {
           firstName: data.firstName,
           lastName: data.lastName || '',
-          block: data.block,
-          building: data.building,
-          society: data.society,
+          block: data.block || undefined,
+          building: defaultBuildingId, // Always include building ID
+          society: data.society || undefined,
           countryCode: data.countryCode,
           mobileNumber: data.mobileNumber,
           email: data.email || '',
@@ -182,7 +233,6 @@ export const CommitteeMembersPage = () => {
       setValue('memberType', fullMember.memberType);
       setValue('status', fullMember.status);
       setValue('block', typeof fullMember.block === 'string' ? fullMember.block : fullMember.block?._id || '');
-      setValue('building', typeof fullMember.building === 'string' ? fullMember.building : fullMember.building?._id || '');
       setValue('society', fullMember.society || '');
       setShowForm(true);
     } catch (error: any) {
@@ -646,22 +696,6 @@ export const CommitteeMembersPage = () => {
                   />
                 </div>
 
-                {/* Building */}
-                <div>
-                  <label htmlFor="building" className="block text-sm font-medium text-gray-700 mb-1">
-                    Building
-                  </label>
-                  <input
-                    type="text"
-                    id="building"
-                    {...register('building')}
-                    className="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-gray-900 focus:ring-0 bg-transparent"
-                    placeholder="Enter building ID (optional)"
-                  />
-                  {errors.building && (
-                    <p className="mt-1 text-sm text-red-500">{errors.building.message as string}</p>
-                  )}
-                </div>
 
                 {/* Society */}
                 <div>

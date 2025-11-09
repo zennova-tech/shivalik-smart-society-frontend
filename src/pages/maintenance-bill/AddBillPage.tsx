@@ -94,7 +94,7 @@ export const AddBillPage = () => {
   const fetchBlocks = async () => {
     try {
       setLoading(true);
-      const response = await getBlocksApi({ limit: 1000, status: 'active' });
+      const response = await getBlocksApi({ limit: 500, status: 'active' });
       setBlocks(response.items || []);
     } catch (error: any) {
       console.error('Error fetching blocks:', error);
@@ -107,7 +107,7 @@ export const AddBillPage = () => {
   const fetchFloors = async (blockId: string) => {
     try {
       setLoading(true);
-      const response = await getFloorsApi({ block: blockId, limit: 1000 });
+      const response = await getFloorsApi({ block: blockId, limit: 500 });
       setFloors(response.items || []);
     } catch (error: any) {
       console.error('Error fetching floors:', error);
@@ -120,7 +120,7 @@ export const AddBillPage = () => {
   const fetchUnits = async (floorId: string) => {
     try {
       setLoading(true);
-      const response = await getUnitsApi({ floor: floorId, limit: 1000 });
+      const response = await getUnitsApi({ floor: floorId, limit: 500 });
       setUnits(response.items || []);
     } catch (error: any) {
       console.error('Error fetching units:', error);
@@ -133,7 +133,7 @@ export const AddBillPage = () => {
   const fetchUnitsByBlock = async (blockId: string) => {
     try {
       setLoading(true);
-      const response = await getUnitsApi({ block: blockId, limit: 1000 });
+      const response = await getUnitsApi({ block: blockId, limit: 500 });
       setUnits(response.items || []);
     } catch (error: any) {
       console.error('Error fetching units:', error);

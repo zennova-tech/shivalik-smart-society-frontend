@@ -6,98 +6,167 @@ import { amenitiesSchema } from '../../utils/validationSchemas/amenitiesSchema';
 import { CustomSelect } from '../../components/ui/CustomSelect';
 import { DataTable, Column, ActionButton } from '../../components/ui/DataTable';
 import { IconEdit, IconTrash, IconEye, IconCheck, IconX, IconTool, IconPlus } from '@tabler/icons-react';
+import {
+  getAmenitiesBySocietyApi,
+  getAmenityByIdApi,
+  addAmenityApi,
+  updateAmenityApi,
+  deleteAmenityApi,
+  Amenity,
+  GetAmenityParams,
+  AddAmenityPayload,
+  UpdateAmenityPayload,
+  BookingSlot,
+} from '../../apis/amenity';
+import { getBlocksBySocietyApi } from '../../apis/block';
+import { getBuildingApi } from '../../apis/building';
+import { getSocietyId } from '../../utils/societyUtils';
+import { showMessage } from '../../utils/Constant';
 
 type AmenitiesFormData = Yup.InferType<typeof amenitiesSchema>;
 
-interface BookingSlot {
-  startTime: string;
-  endTime: string;
-}
-
-interface Amenity {
-  id: string;
-  amenityName: string;
-  description: string;
-  capacity: number;
-  amenityType: string;
-  bookingType: string;
-  bookingSlots: BookingSlot[];
-  advanceBookingDays: number;
-  status: string;
-  photo?: string;
-}
-
 const statusOptions = [
-  { value: 'Available', label: 'Available' },
-  { value: 'Maintenance', label: 'Maintenance' },
-  { value: 'Unavailable', label: 'Unavailable' },
+  { value: 'available', label: 'Available' },
+  { value: 'unavailable', label: 'Unavailable' },
+  { value: 'archived', label: 'Archived' },
 ];
 
 const amenityTypeOptions = [
-  { value: 'Free', label: 'Free' },
-  { value: 'Paid', label: 'Paid' },
+  { value: 'free', label: 'Free' },
+  { value: 'paid', label: 'Paid' },
 ];
 
 const bookingTypeOptions = [
-  { value: 'One Time Booking', label: 'One Time Booking' },
-  { value: 'Recurring Booking', label: 'Recurring Booking' },
-];
-
-const mockAmenities: Amenity[] = [
-  {
-    id: '1',
-    amenityName: 'Swimming Pool',
-    description: 'Olympic size swimming pool with lifeguard',
-    capacity: 50,
-    amenityType: 'Free',
-    bookingType: 'One Time Booking',
-    bookingSlots: [
-      { startTime: '06:00', endTime: '08:00' },
-      { startTime: '18:00', endTime: '20:00' },
-    ],
-    advanceBookingDays: 7,
-    status: 'Available',
-  },
-  {
-    id: '2',
-    amenityName: 'Gym',
-    description: 'Fully equipped gym with modern equipment',
-    capacity: 30,
-    amenityType: 'Free',
-    bookingType: 'Recurring Booking',
-    bookingSlots: [
-      { startTime: '05:00', endTime: '23:00' },
-    ],
-    advanceBookingDays: 3,
-    status: 'Available',
-  },
-  {
-    id: '3',
-    amenityName: 'Party Hall',
-    description: 'Large party hall for events and celebrations',
-    capacity: 100,
-    amenityType: 'Paid',
-    bookingType: 'One Time Booking',
-    bookingSlots: [
-      { startTime: '10:00', endTime: '14:00' },
-      { startTime: '15:00', endTime: '19:00' },
-      { startTime: '19:00', endTime: '23:00' },
-    ],
-    advanceBookingDays: 30,
-    status: 'Maintenance',
-  },
+  { value: 'one_time', label: 'One Time Booking' },
+  { value: 'slot_based', label: 'Slot Based Booking' },
+  { value: 'recurring', label: 'Recurring Booking' },
 ];
 
 export const AmenitiesPage = () => {
-  const [amenities, setAmenities] = useState<Amenity[]>(mockAmenities);
+  const [amenities, setAmenities] = useState<Amenity[]>([]);
+  const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingAmenity, setEditingAmenity] = useState<Amenity | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [defaultBuildingId, setDefaultBuildingId] = useState<string | null>(null);
+  const [loadingBuilding, setLoadingBuilding] = useState(false);
+  const [blockOptions, setBlockOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [loadingBlocks, setLoadingBlocks] = useState(false);
 
   useEffect(() => {
     document.title = 'Amenities - Smart Society';
+    fetchDefaultBuilding();
+    fetchBlocks();
+    fetchAmenities();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (searchTerm === '') {
+      fetchAmenities();
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      fetchAmenities();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
+
+  useEffect(() => {
+    fetchAmenities();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFilters]);
+
+  const fetchDefaultBuilding = async () => {
+    try {
+      setLoadingBuilding(true);
+      const societyId = getSocietyId();
+      if (!societyId) {
+        showMessage('Society ID not found. Please select a society first.', 'error');
+        return;
+      }
+
+      const buildingResponse = await getBuildingApi(societyId);
+      
+      let buildings: any[] = [];
+      if (buildingResponse && typeof buildingResponse === 'object') {
+        if (Array.isArray(buildingResponse.items)) {
+          buildings = buildingResponse.items;
+        } else if (buildingResponse._id) {
+          buildings = [buildingResponse];
+        } else if (Array.isArray(buildingResponse)) {
+          buildings = buildingResponse;
+        }
+      }
+
+      const activeBuilding = buildings.find((b: any) => b.status === 'active') || buildings[0];
+      
+      if (activeBuilding) {
+        const buildingId = activeBuilding._id || activeBuilding.id;
+        setDefaultBuildingId(buildingId);
+      } else {
+        showMessage('No building found for this society. Please create a building first.', 'error');
+      }
+    } catch (error: any) {
+      console.error('Error fetching building:', error);
+      showMessage('Failed to fetch building. Please ensure a building exists for this society.', 'error');
+    } finally {
+      setLoadingBuilding(false);
+    }
+  };
+
+  const fetchBlocks = async () => {
+    try {
+      setLoadingBlocks(true);
+      const response = await getBlocksBySocietyApi({ limit: 500 });
+      const blocks = response.items || [];
+      setBlockOptions(
+        blocks.map((block) => ({
+          value: block._id,
+          label: block.name,
+        }))
+      );
+    } catch (error: any) {
+      console.error('Error fetching blocks:', error);
+      showMessage('Failed to fetch blocks', 'error');
+    } finally {
+      setLoadingBlocks(false);
+    }
+  };
+
+  const fetchAmenities = async () => {
+    try {
+      setLoading(true);
+      const params: GetAmenityParams = {
+        q: searchTerm || undefined,
+        status: selectedFilters.status || undefined,
+        limit: 500,
+      };
+
+      const response = await getAmenitiesBySocietyApi(params);
+      let filteredAmenities = response.items || [];
+
+      // Apply additional filters client-side
+      if (selectedFilters.amenityType) {
+        filteredAmenities = filteredAmenities.filter((amenity) => amenity.amenityType === selectedFilters.amenityType);
+      }
+      if (selectedFilters.bookingType) {
+        filteredAmenities = filteredAmenities.filter((amenity) => amenity.bookingType === selectedFilters.bookingType);
+      }
+
+      setAmenities(filteredAmenities);
+    } catch (error: any) {
+      console.error('Error fetching amenities:', error);
+      showMessage('Failed to fetch amenities', 'error');
+      setAmenities([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const {
     register,
@@ -107,17 +176,18 @@ export const AmenitiesPage = () => {
     watch,
     reset,
     control,
+    trigger,
   } = useForm<AmenitiesFormData>({
     resolver: yupResolver(amenitiesSchema),
     defaultValues: {
       amenityName: '',
       description: '',
-      capacity: 0,
+      capacity: 1,
       amenityType: '',
       bookingType: '',
-      bookingSlots: [{ startTime: '', endTime: '' }],
+      bookingSlots: [],
       advanceBookingDays: 0,
-      status: '',
+      status: 'available',
       photo: undefined,
     },
   });
@@ -127,151 +197,217 @@ export const AmenitiesPage = () => {
     name: 'bookingSlots',
   });
 
-  const onSubmit = (data: AmenitiesFormData) => {
-    console.log('Form submitted:', data);
-    // Ensure booking slots have required fields
-    const processedSlots: BookingSlot[] = data.bookingSlots.map(slot => ({
-      startTime: slot.startTime || '',
-      endTime: slot.endTime || '',
-    }));
+  const watchedAmenityType = watch('amenityType');
+  const watchedBookingType = watch('bookingType');
 
-    if (editingAmenity) {
-      setAmenities(
-        amenities.map((amenity) =>
-          amenity.id === editingAmenity.id
-            ? {
-                ...amenity,
-                amenityName: data.amenityName,
-                description: data.description,
-                capacity: data.capacity,
-                amenityType: data.amenityType,
-                bookingType: data.bookingType,
-                bookingSlots: processedSlots,
-                advanceBookingDays: data.advanceBookingDays,
-                status: data.status,
-              }
-            : amenity
-        )
-      );
+  // Show booking slots only for slot_based booking type
+  const showBookingSlots = watchedBookingType === 'slot_based';
+  
+  // Show advance booking days for paid amenities or slot_based/recurring booking types
+  const showAdvanceBookingDays = watchedAmenityType === 'paid' || 
+                                  watchedBookingType === 'slot_based' || 
+                                  watchedBookingType === 'recurring';
+
+  const onSubmit = async (data: AmenitiesFormData) => {
+    try {
+      setSubmitting(true);
+
+      if (!defaultBuildingId) {
+        showMessage('Building ID not found. Please ensure a building exists for this society.', 'error');
+        return;
+      }
+
+      // Process booking slots - only include if bookingType is slot_based
+      const processedSlots: BookingSlot[] = 
+        data.bookingType === 'slot_based' && data.bookingSlots
+          ? data.bookingSlots
+              .filter(slot => slot.startTime && slot.endTime)
+              .map(slot => ({
+                startTime: slot.startTime || '',
+                endTime: slot.endTime || '',
+                capacity: slot.capacity,
+              }))
+          : [];
+
+      // Set advanceBookingDays - only if required (paid or slot_based/recurring)
+      const advanceBookingDaysValue = 
+        data.amenityType === 'paid' || 
+        data.bookingType === 'slot_based' || 
+        data.bookingType === 'recurring'
+          ? (data.advanceBookingDays || 0)
+          : 0;
+
+      if (editingAmenity) {
+        const updatePayload: UpdateAmenityPayload = {
+          id: editingAmenity._id,
+          name: data.amenityName,
+          description: data.description || undefined,
+          capacity: data.capacity,
+          amenityType: data.amenityType,
+          bookingType: data.bookingType,
+          slots: processedSlots,
+          advanceBookingDays: advanceBookingDaysValue,
+          building: defaultBuildingId,
+          status: data.status,
+        };
+        
+        await updateAmenityApi(updatePayload);
+        showMessage('Amenity updated successfully!', 'success');
+      } else {
+        const addPayload: AddAmenityPayload = {
+          name: data.amenityName,
+          description: data.description || undefined,
+          capacity: data.capacity,
+          amenityType: data.amenityType,
+          bookingType: data.bookingType,
+          slots: processedSlots,
+          advanceBookingDays: advanceBookingDaysValue,
+          building: defaultBuildingId,
+          status: data.status || 'available',
+        };
+        
+        await addAmenityApi(addPayload);
+        showMessage('Amenity added successfully!', 'success');
+      }
+      
+      reset({
+        amenityName: '',
+        description: '',
+        capacity: 1,
+        amenityType: '',
+        bookingType: '',
+        bookingSlots: [],
+        advanceBookingDays: 0,
+        status: 'available',
+        photo: undefined,
+      });
+      setShowForm(false);
       setEditingAmenity(null);
-    } else {
-      const newAmenity: Amenity = {
-        id: Date.now().toString(),
-        amenityName: data.amenityName,
-        description: data.description,
-        capacity: data.capacity,
-        amenityType: data.amenityType,
-        bookingType: data.bookingType,
-        bookingSlots: processedSlots,
-        advanceBookingDays: data.advanceBookingDays,
-        status: data.status,
-      };
-      setAmenities([...amenities, newAmenity]);
+      fetchAmenities();
+    } catch (error: any) {
+      console.error('Error saving amenity:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to save amenity';
+      showMessage(errorMessage, 'error');
+    } finally {
+      setSubmitting(false);
     }
-    reset({
-      amenityName: '',
-      description: '',
-      capacity: 0,
-      amenityType: '',
-      bookingType: '',
-      bookingSlots: [{ startTime: '', endTime: '' }],
-      advanceBookingDays: 0,
-      status: '',
-      photo: undefined,
-    });
-    setShowForm(false);
-    alert(editingAmenity ? 'Amenity updated successfully!' : 'Amenity added successfully!');
   };
 
-  const handleEdit = (amenity: Amenity) => {
-    setEditingAmenity(amenity);
-    setValue('amenityName', amenity.amenityName);
-    setValue('description', amenity.description);
-    setValue('capacity', amenity.capacity);
-    setValue('amenityType', amenity.amenityType);
-    setValue('bookingType', amenity.bookingType);
-    setValue('bookingSlots', amenity.bookingSlots.length > 0 ? amenity.bookingSlots.map(slot => ({
-      startTime: slot.startTime,
-      endTime: slot.endTime,
-    })) : [{ startTime: '', endTime: '' }]);
-    setValue('advanceBookingDays', amenity.advanceBookingDays);
-    setValue('status', amenity.status);
-    setShowForm(true);
+  const handleEdit = async (amenity: Amenity) => {
+    try {
+      const fullAmenity = await getAmenityByIdApi(amenity._id);
+      setEditingAmenity(fullAmenity);
+      setValue('amenityName', fullAmenity.name);
+      setValue('description', fullAmenity.description || '');
+      setValue('capacity', fullAmenity.capacity);
+      setValue('amenityType', fullAmenity.amenityType || '');
+      setValue('bookingType', fullAmenity.bookingType || '');
+      setValue('bookingSlots', fullAmenity.slots && fullAmenity.slots.length > 0 ? fullAmenity.slots.map(slot => ({
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+      })) : [{ startTime: '', endTime: '' }]);
+      setValue('advanceBookingDays', fullAmenity.advanceBookingDays || 0);
+      setValue('status', fullAmenity.status || '');
+      setShowForm(true);
+    } catch (error: any) {
+      console.error('Error fetching amenity details:', error);
+      showMessage('Failed to fetch amenity details', 'error');
+    }
   };
 
-  const handleDelete = (amenity: Amenity) => {
-    if (window.confirm(`Are you sure you want to delete ${amenity.amenityName}?`)) {
-      setAmenities(amenities.filter((a) => a.id !== amenity.id));
-      alert('Amenity deleted successfully!');
+  const handleDelete = async (amenity: Amenity) => {
+    if (window.confirm(`Are you sure you want to delete ${amenity.name}?`)) {
+      try {
+        await deleteAmenityApi({ id: amenity._id });
+        showMessage('Amenity deleted successfully!', 'success');
+        fetchAmenities();
+      } catch (error: any) {
+        console.error('Error deleting amenity:', error);
+        const errorMessage = error.response?.data?.message || error.message || 'Failed to delete amenity';
+        showMessage(errorMessage, 'error');
+      }
     }
   };
 
   const handleView = (amenity: Amenity) => {
-    const slotsText = amenity.bookingSlots
-      .map((slot) => `${slot.startTime} - ${slot.endTime}`)
-      .join('\n');
+    const slotsText = amenity.slots && amenity.slots.length > 0
+      ? amenity.slots.map((slot) => `${slot.startTime} - ${slot.endTime}`).join('\n')
+      : 'No slots defined';
     alert(
-      `Amenity Details:\nName: ${amenity.amenityName}\nDescription: ${amenity.description}\nCapacity: ${amenity.capacity}\nType: ${amenity.amenityType}\nBooking Type: ${amenity.bookingType}\nSlots:\n${slotsText}\nAdvance Booking: ${amenity.advanceBookingDays} days\nStatus: ${amenity.status}`
+      `Amenity Details:\nName: ${amenity.name}\nDescription: ${amenity.description || 'N/A'}\nCapacity: ${amenity.capacity}\nType: ${amenity.amenityType}\nBooking Type: ${amenity.bookingType}\nSlots:\n${slotsText}\nAdvance Booking: ${amenity.advanceBookingDays} days\nStatus: ${amenity.status}`
     );
   };
 
   const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'Available':
+    const statusLower = status.toLowerCase();
+    switch (statusLower) {
+      case 'available':
         return <IconCheck className="w-4 h-4 text-green-600" />;
-      case 'Maintenance':
-        return <IconTool className="w-4 h-4 text-yellow-600" />;
-      case 'Unavailable':
+      case 'unavailable':
         return <IconX className="w-4 h-4 text-red-600" />;
+      case 'archived':
+        return <IconTool className="w-4 h-4 text-gray-600" />;
       default:
         return null;
     }
   };
 
   const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'Available':
+    const statusLower = status.toLowerCase();
+    switch (statusLower) {
+      case 'available':
         return 'bg-green-100 text-green-800';
-      case 'Maintenance':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'Unavailable':
+      case 'unavailable':
         return 'bg-red-100 text-red-800';
+      case 'archived':
+        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
   };
 
-  // Filter amenities by search term and filters
-  const filteredAmenities = amenities.filter((amenity) => {
-    // Search filter
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch =
-        amenity.amenityName.toLowerCase().includes(searchLower) ||
-        amenity.description.toLowerCase().includes(searchLower) ||
-        amenity.amenityType.toLowerCase().includes(searchLower) ||
-        amenity.bookingType.toLowerCase().includes(searchLower) ||
-        amenity.status.toLowerCase().includes(searchLower) ||
-        amenity.capacity.toString().includes(searchLower);
-      
-      if (!matchesSearch) {
-        return false;
-      }
+  const getStatusDisplay = (status: string) => {
+    const statusLower = status.toLowerCase();
+    switch (statusLower) {
+      case 'available':
+        return 'Available';
+      case 'unavailable':
+        return 'Unavailable';
+      case 'archived':
+        return 'Archived';
+      default:
+        return status;
     }
+  };
 
-    // Other filters
-    if (selectedFilters.amenityType && amenity.amenityType !== selectedFilters.amenityType) {
-      return false;
+  const getAmenityTypeDisplay = (type: string) => {
+    const typeLower = type.toLowerCase();
+    switch (typeLower) {
+      case 'free':
+        return 'Free';
+      case 'paid':
+        return 'Paid';
+      default:
+        return type;
     }
-    if (selectedFilters.bookingType && amenity.bookingType !== selectedFilters.bookingType) {
-      return false;
-    }
-    if (selectedFilters.status && amenity.status !== selectedFilters.status) {
-      return false;
-    }
+  };
 
-    return true;
-  });
+  const getBookingTypeDisplay = (type: string) => {
+    const typeLower = type.toLowerCase();
+    switch (typeLower) {
+      case 'one_time':
+        return 'One Time Booking';
+      case 'recurring':
+        return 'Recurring Booking';
+      case 'slot_based':
+        return 'Slot Based';
+      default:
+        return type;
+    }
+  };
+
+  // Filtering is mostly done server-side
+  const filteredAmenities = amenities;
 
   const handleFilterChange = (key: string, value: string) => {
     setSelectedFilters((prev) => ({
@@ -281,31 +417,45 @@ export const AmenitiesPage = () => {
   };
 
   const columns: Column<Amenity>[] = [
-    { key: 'amenityName', header: 'Amenity Name', sortable: true },
+    { key: 'name', header: 'Amenity Name', sortable: true },
     {
       key: 'description',
       header: 'Description',
       sortable: true,
       render: (amenity) => (
         <div className="max-w-xs truncate" title={amenity.description}>
-          {amenity.description}
+          {amenity.description || 'N/A'}
         </div>
       ),
     },
     { key: 'capacity', header: 'Capacity', sortable: true },
-    { key: 'amenityType', header: 'Type', sortable: true },
-    { key: 'bookingType', header: 'Booking Type', sortable: true },
     {
-      key: 'bookingSlots',
+      key: 'amenityType',
+      header: 'Type',
+      sortable: true,
+      render: (amenity) => getAmenityTypeDisplay(amenity.amenityType),
+    },
+    {
+      key: 'bookingType',
+      header: 'Booking Type',
+      sortable: true,
+      render: (amenity) => getBookingTypeDisplay(amenity.bookingType),
+    },
+    {
+      key: 'slots',
       header: 'Booking Slots',
       sortable: false,
       render: (amenity) => (
         <div className="text-sm">
-          {amenity.bookingSlots.map((slot, idx) => (
-            <div key={idx} className="text-xs">
-              {slot.startTime} - {slot.endTime}
-            </div>
-          ))}
+          {amenity.slots && amenity.slots.length > 0 ? (
+            amenity.slots.map((slot, idx) => (
+              <div key={idx} className="text-xs">
+                {slot.startTime} - {slot.endTime}
+              </div>
+            ))
+          ) : (
+            <span className="text-xs text-gray-400">No slots</span>
+          )}
         </div>
       ),
     },
@@ -318,7 +468,7 @@ export const AmenitiesPage = () => {
         <div className="flex items-center gap-2">
           {getStatusIcon(amenity.status)}
           <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadgeColor(amenity.status)}`}>
-            {amenity.status}
+            {getStatusDisplay(amenity.status)}
           </span>
         </div>
       ),
@@ -342,12 +492,12 @@ export const AmenitiesPage = () => {
               reset({
                 amenityName: '',
                 description: '',
-                capacity: 0,
+                capacity: 1,
                 amenityType: '',
                 bookingType: '',
-                bookingSlots: [{ startTime: '', endTime: '' }],
+                bookingSlots: [],
                 advanceBookingDays: 0,
-                status: '',
+                status: 'available',
                 photo: undefined,
               });
               setEditingAmenity(null);
@@ -402,9 +552,7 @@ export const AmenitiesPage = () => {
                       onChange={(value) => handleFilterChange('amenityType', value)}
                       options={[
                         { value: '', label: 'All Types' },
-                        ...Array.from(new Set(amenities.map((a) => a.amenityType)))
-                          .sort()
-                          .map((option) => ({ value: option, label: option })),
+                        ...amenityTypeOptions,
                       ]}
                       placeholder="All Types"
                       disabled={false}
@@ -418,9 +566,7 @@ export const AmenitiesPage = () => {
                       onChange={(value) => handleFilterChange('bookingType', value)}
                       options={[
                         { value: '', label: 'All Booking Types' },
-                        ...Array.from(new Set(amenities.map((a) => a.bookingType)))
-                          .sort()
-                          .map((option) => ({ value: option, label: option })),
+                        ...bookingTypeOptions,
                       ]}
                       placeholder="All Booking Types"
                       disabled={false}
@@ -434,9 +580,7 @@ export const AmenitiesPage = () => {
                       onChange={(value) => handleFilterChange('status', value)}
                       options={[
                         { value: '', label: 'All Status' },
-                        ...Array.from(new Set(amenities.map((a) => a.status)))
-                          .sort()
-                          .map((option) => ({ value: option, label: option })),
+                        ...statusOptions,
                       ]}
                       placeholder="All Status"
                       disabled={false}
@@ -446,14 +590,22 @@ export const AmenitiesPage = () => {
               </div>
             </div>
 
-            <DataTable
-              data={filteredAmenities}
-              columns={columns}
-              actions={actions}
-              searchable={false}
-              filterable={false}
-              emptyMessage="No amenities found"
-            />
+            {loading ? (
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <div className="text-center py-12">
+                  <p className="text-lg font-semibold text-gray-600 mb-2">Loading amenities...</p>
+                </div>
+              </div>
+            ) : (
+              <DataTable
+                data={filteredAmenities}
+                columns={columns}
+                actions={actions}
+                searchable={false}
+                filterable={false}
+                emptyMessage="No amenities found"
+              />
+            )}
           </div>
         )}
 
@@ -472,12 +624,12 @@ export const AmenitiesPage = () => {
                   reset({
                     amenityName: '',
                     description: '',
-                    capacity: 0,
+                    capacity: 1,
                     amenityType: '',
                     bookingType: '',
-                    bookingSlots: [{ startTime: '', endTime: '' }],
+                    bookingSlots: [],
                     advanceBookingDays: 0,
-                    status: '',
+                    status: 'available',
                     photo: undefined,
                   });
                 }}
@@ -709,9 +861,10 @@ export const AmenitiesPage = () => {
               </button>
               <button
                 type="submit"
-                className="px-6 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
+                disabled={submitting}
+                className="px-6 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {editingAmenity ? 'Update Amenity' : 'Save Amenity'}
+                {submitting ? 'Saving...' : editingAmenity ? 'Update Amenity' : 'Save Amenity'}
               </button>
             </div>
           </form>

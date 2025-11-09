@@ -6,122 +6,178 @@ import { noticeBoardSchema } from '../../utils/validationSchemas/noticeBoardSche
 import { CustomSelect } from '../../components/ui/CustomSelect';
 import { DataTable, Column, ActionButton } from '../../components/ui/DataTable';
 import { IconEdit, IconTrash, IconEye, IconCheck, IconX, IconClock, IconArchive } from '@tabler/icons-react';
+import {
+  getNoticesBySocietyApi,
+  getNoticeByIdApi,
+  addNoticeApi,
+  updateNoticeApi,
+  deleteNoticeApi,
+  Notice,
+  GetNoticeParams,
+  AddNoticePayload,
+  UpdateNoticePayload,
+} from '../../apis/notice';
+import { getBlocksBySocietyApi } from '../../apis/block';
+import { getUnitsApi } from '../../apis/unit';
+import { getBuildingApi } from '../../apis/building';
+import { getSocietyId } from '../../utils/societyUtils';
+import { showMessage } from '../../utils/Constant';
 
 type NoticeBoardFormData = Yup.InferType<typeof noticeBoardSchema>;
 
-interface Notice {
-  id: string;
-  noticeNumber: string;
-  title: string;
-  category: string;
-  blockName: string;
-  unitNumber: string;
-  priority: string;
-  publishDate: string;
-  expiryDate: string;
-  status: string;
-}
-
 const statusOptions = [
-  { value: 'Draft', label: 'Draft' },
-  { value: 'Published', label: 'Published' },
-  { value: 'Expired', label: 'Expired' },
-  { value: 'Archived', label: 'Archived' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'published', label: 'Published' },
+  { value: 'expired', label: 'Expired' },
+  { value: 'archived', label: 'Archived' },
 ];
 
 const categoryOptions = [
-  { value: 'Maintenance', label: 'Maintenance' },
-  { value: 'Payment', label: 'Payment' },
-  { value: 'Meeting', label: 'Meeting' },
-  { value: 'Event', label: 'Event' },
-  { value: 'General', label: 'General' },
-  { value: 'Emergency', label: 'Emergency' },
+  { value: 'general', label: 'General' },
+  { value: 'maintenance', label: 'Maintenance' },
+  { value: 'security', label: 'Security' },
+  { value: 'event', label: 'Event' },
+  { value: 'other', label: 'Other' },
 ];
 
 const priorityOptions = [
-  { value: 'Low', label: 'Low' },
-  { value: 'Medium', label: 'Medium' },
-  { value: 'High', label: 'High' },
-  { value: 'Urgent', label: 'Urgent' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'urgent', label: 'Urgent' },
 ];
 
-const blockOptions = [
-  { value: 'block1', label: 'Block A' },
-  { value: 'block2', label: 'Block B' },
-  { value: 'block3', label: 'Block C' },
-];
-
-const unitOptions = [
-  { value: 'unit1', label: '101' },
-  { value: 'unit2', label: '102' },
-  { value: 'unit3', label: '201' },
-  { value: 'unit4', label: '202' },
-  { value: 'unit5', label: '301' },
-];
-
-const mockNotices: Notice[] = [
-  {
-    id: '1',
-    noticeNumber: 'NB-001',
-    title: 'Monthly Maintenance Payment Due',
-    category: 'Payment',
-    blockName: 'Block A',
-    unitNumber: '101',
-    priority: 'High',
-    publishDate: '2024-01-15',
-    expiryDate: '2024-01-31',
-    status: 'Published',
-  },
-  {
-    id: '2',
-    noticeNumber: 'NB-002',
-    title: 'Society Meeting Scheduled',
-    category: 'Meeting',
-    blockName: 'Block B',
-    unitNumber: '201',
-    priority: 'Medium',
-    publishDate: '2024-01-20',
-    expiryDate: '2024-02-05',
-    status: 'Published',
-  },
-  {
-    id: '3',
-    noticeNumber: 'NB-003',
-    title: 'Parking Area Maintenance',
-    category: 'Maintenance',
-    blockName: 'Block A',
-    unitNumber: '102',
-    priority: 'Low',
-    publishDate: '2024-01-10',
-    expiryDate: '2024-01-25',
-    status: 'Expired',
-  },
-  {
-    id: '4',
-    noticeNumber: 'NB-004',
-    title: 'New Year Celebration Event',
-    category: 'Event',
-    blockName: 'Block C',
-    unitNumber: '301',
-    priority: 'Medium',
-    publishDate: '2024-01-25',
-    expiryDate: '2024-02-10',
-    status: 'Draft',
-  },
-];
+// Block and Unit options will be fetched from API
 
 export const NoticeBoardPage = () => {
-  const [notices, setNotices] = useState<Notice[]>(mockNotices);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingNotice, setEditingNotice] = useState<Notice | null>(null);
   const [dateFilterFrom, setDateFilterFrom] = useState<string>('');
   const [dateFilterTo, setDateFilterTo] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [blockOptions, setBlockOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [unitOptions, setUnitOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [loadingBlocks, setLoadingBlocks] = useState(false);
+  const [loadingUnits, setLoadingUnits] = useState(false);
 
   useEffect(() => {
     document.title = 'Notice Board - Smart Society';
+    fetchBlocks();
+    fetchNotices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (searchTerm === '') {
+      fetchNotices();
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      fetchNotices();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
+
+  useEffect(() => {
+    fetchNotices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFilters, dateFilterFrom, dateFilterTo]);
+
+  const fetchBlocks = async () => {
+    try {
+      setLoadingBlocks(true);
+      const response = await getBlocksBySocietyApi({ limit: 500 });
+      const blocks = response.items || [];
+      setBlockOptions(
+        blocks.map((block) => ({
+          value: block._id,
+          label: block.name,
+        }))
+      );
+    } catch (error: any) {
+      console.error('Error fetching blocks:', error);
+      showMessage('Failed to fetch blocks', 'error');
+    } finally {
+      setLoadingBlocks(false);
+    }
+  };
+
+  const fetchUnits = async (blockId?: string) => {
+    try {
+      setLoadingUnits(true);
+      const params: any = { limit: 500 };
+      if (blockId) {
+        params.block = blockId;
+      }
+      const response = await getUnitsApi(params);
+      const units = response.items || [];
+      setUnitOptions(
+        units.map((unit) => ({
+          value: unit._id,
+          label: unit.unitNumber,
+        }))
+      );
+    } catch (error: any) {
+      console.error('Error fetching units:', error);
+      showMessage('Failed to fetch units', 'error');
+    } finally {
+      setLoadingUnits(false);
+    }
+  };
+
+  const fetchNotices = async () => {
+    try {
+      setLoading(true);
+      const params: GetNoticeParams = {
+        q: searchTerm || undefined,
+        status: selectedFilters.status || undefined,
+        block: selectedFilters.blockName || undefined,
+        priority: selectedFilters.priority || undefined,
+        limit: 500,
+      };
+
+      const response = await getNoticesBySocietyApi(params);
+      let filteredNotices = response.items || [];
+
+      // Apply date filters client-side
+      if (dateFilterFrom || dateFilterTo) {
+        filteredNotices = filteredNotices.filter((notice) => {
+          const noticeDate = new Date(notice.publishDate);
+          if (dateFilterFrom && dateFilterTo) {
+            const fromDate = new Date(dateFilterFrom);
+            const toDate = new Date(dateFilterTo);
+            return noticeDate >= fromDate && noticeDate <= toDate;
+          } else if (dateFilterFrom) {
+            const fromDate = new Date(dateFilterFrom);
+            return noticeDate >= fromDate;
+          } else if (dateFilterTo) {
+            const toDate = new Date(dateFilterTo);
+            return noticeDate <= toDate;
+          }
+          return true;
+        });
+      }
+
+      // Apply category filter client-side
+      if (selectedFilters.category) {
+        filteredNotices = filteredNotices.filter((notice) => notice.category === selectedFilters.category);
+      }
+
+      setNotices(filteredNotices);
+    } catch (error: any) {
+      console.error('Error fetching notices:', error);
+      showMessage('Failed to fetch notices', 'error');
+      setNotices([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const {
     register,
@@ -145,84 +201,185 @@ export const NoticeBoardPage = () => {
     },
   });
 
-  const onSubmit = (data: NoticeBoardFormData) => {
-    console.log('Form submitted:', data);
-    if (editingNotice) {
-      setNotices(
-        notices.map((notice) =>
-          notice.id === editingNotice.id
-            ? {
-                ...notice,
-                noticeNumber: data.noticeNumber,
-                title: data.title,
-                category: categoryOptions.find((c) => c.value === data.category)?.label || '',
-                blockName: blockOptions.find((b) => b.value === data.blockId)?.label || '',
-                unitNumber: unitOptions.find((u) => u.value === data.unitId)?.label || '',
-                priority: data.priority,
-                publishDate: data.publishDate,
-                expiryDate: data.expiryDate,
-                status: data.status,
-              }
-            : notice
-        )
-      );
-      setEditingNotice(null);
+  // Watch blockId to fetch units when block changes
+  const watchedBlockId = watch('blockId');
+  useEffect(() => {
+    if (watchedBlockId) {
+      // Reset unit selection when block changes
+      setValue('unitId', '', { shouldValidate: false });
+      // Fetch units for the selected block
+      fetchUnits(watchedBlockId);
     } else {
-      const newNotice: Notice = {
-        id: Date.now().toString(),
-        noticeNumber: data.noticeNumber,
-        title: data.title,
-        category: categoryOptions.find((c) => c.value === data.category)?.label || '',
-        blockName: blockOptions.find((b) => b.value === data.blockId)?.label || '',
-        unitNumber: unitOptions.find((u) => u.value === data.unitId)?.label || '',
-        priority: data.priority,
-        publishDate: data.publishDate,
-        expiryDate: data.expiryDate,
-        status: data.status,
-      };
-      setNotices([...notices, newNotice]);
+      // Reset unit selection and fetch all units if no block selected
+      setValue('unitId', '', { shouldValidate: false });
+      setUnitOptions([]);
     }
-    reset();
-    setShowForm(false);
-    alert(editingNotice ? 'Notice updated successfully!' : 'Notice added successfully!');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedBlockId, setValue]);
+
+  const onSubmit = async (data: NoticeBoardFormData) => {
+    try {
+      setSubmitting(true);
+
+      // Convert dates to ISO format or timestamps
+      const publishDate = data.publishDate ? new Date(data.publishDate).toISOString() : new Date().toISOString();
+      const expiryDate = data.expiryDate ? new Date(data.expiryDate).toISOString() : undefined;
+
+      if (editingNotice) {
+        const updatePayload: UpdateNoticePayload = {
+          id: editingNotice._id,
+          title: data.title,
+          description: data.title, // Using title as description if description field doesn't exist in form
+          category: data.category.toLowerCase(),
+          priority: data.priority.toLowerCase(),
+          block: data.blockId || undefined,
+          unit: data.unitId || undefined,
+          publishDate: publishDate,
+          expiryDate: expiryDate,
+          status: data.status.toLowerCase(),
+        };
+        
+        await updateNoticeApi(updatePayload);
+        showMessage('Notice updated successfully!', 'success');
+      } else {
+        const addPayload: AddNoticePayload = {
+          title: data.title,
+          description: data.title, // Using title as description if description field doesn't exist in form
+          category: data.category.toLowerCase(),
+          priority: data.priority.toLowerCase(),
+          block: data.blockId || undefined,
+          unit: data.unitId || undefined,
+          publishDate: publishDate,
+          expiryDate: expiryDate,
+          status: data.status.toLowerCase(),
+        };
+        
+        await addNoticeApi(addPayload);
+        showMessage('Notice added successfully!', 'success');
+      }
+      
+      reset({
+        noticeNumber: '',
+        title: '',
+        category: '',
+        blockId: '',
+        unitId: '',
+        priority: '',
+        publishDate: '',
+        expiryDate: '',
+        status: '',
+      });
+      setShowForm(false);
+      setEditingNotice(null);
+      fetchNotices();
+    } catch (error: any) {
+      console.error('Error saving notice:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to save notice';
+      showMessage(errorMessage, 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleEdit = (notice: Notice) => {
-    setEditingNotice(notice);
-    setValue('noticeNumber', notice.noticeNumber);
-    setValue('title', notice.title);
-    setValue('category', categoryOptions.find((c) => c.label === notice.category)?.value || '');
-    setValue('blockId', blockOptions.find((b) => b.label === notice.blockName)?.value || '');
-    setValue('unitId', unitOptions.find((u) => u.label === notice.unitNumber)?.value || '');
-    setValue('priority', notice.priority);
-    setValue('publishDate', notice.publishDate);
-    setValue('expiryDate', notice.expiryDate);
-    setValue('status', notice.status);
-    setShowForm(true);
+  const handleEdit = async (notice: Notice) => {
+    try {
+      const fullNotice = await getNoticeByIdApi(notice._id);
+      setEditingNotice(fullNotice);
+      
+      // Extract block ID
+      let blockId = '';
+      if (typeof fullNotice.block === 'string') {
+        blockId = fullNotice.block;
+      } else if (fullNotice.block && typeof fullNotice.block === 'object') {
+        blockId = (fullNotice.block as any)?._id || '';
+      }
+
+      // Extract unit ID
+      let unitId = '';
+      if (typeof fullNotice.unit === 'string') {
+        unitId = fullNotice.unit;
+      } else if (fullNotice.unit && typeof fullNotice.unit === 'object') {
+        unitId = (fullNotice.unit as any)?._id || '';
+      }
+
+      // Format dates for input fields
+      const publishDate = fullNotice.publishDate ? new Date(fullNotice.publishDate).toISOString().split('T')[0] : '';
+      const expiryDate = fullNotice.expiryDate ? new Date(fullNotice.expiryDate).toISOString().split('T')[0] : '';
+
+      setValue('noticeNumber', ''); // Notice number is not in backend
+      setValue('title', fullNotice.title);
+      setValue('category', fullNotice.category || '');
+      setValue('priority', fullNotice.priority || '');
+      setValue('publishDate', publishDate);
+      setValue('expiryDate', expiryDate);
+      setValue('status', fullNotice.status || '');
+      
+      // Set block ID first, then fetch units, then set unit ID
+      if (blockId) {
+        setValue('blockId', blockId);
+        // Fetch units for the selected block
+        try {
+          await fetchUnits(blockId);
+          // Wait a bit for state to update, then set unit ID
+          setTimeout(() => {
+            if (unitId) {
+              setValue('unitId', unitId, { shouldValidate: true });
+            }
+          }, 300);
+        } catch (err) {
+          console.error('Error fetching units:', err);
+          // Still set unit ID even if fetch fails (might be a display issue)
+          if (unitId) {
+            setValue('unitId', unitId);
+          }
+        }
+      } else {
+        setValue('blockId', '');
+        setValue('unitId', unitId || '');
+      }
+      
+      setShowForm(true);
+    } catch (error: any) {
+      console.error('Error fetching notice details:', error);
+      showMessage('Failed to fetch notice details', 'error');
+    }
   };
 
-  const handleDelete = (notice: Notice) => {
-    if (window.confirm(`Are you sure you want to delete notice ${notice.noticeNumber}?`)) {
-      setNotices(notices.filter((n) => n.id !== notice.id));
-      alert('Notice deleted successfully!');
+  const handleDelete = async (notice: Notice) => {
+    if (window.confirm(`Are you sure you want to delete notice "${notice.title}"?`)) {
+      try {
+        await deleteNoticeApi({ id: notice._id });
+        showMessage('Notice deleted successfully!', 'success');
+        fetchNotices();
+      } catch (error: any) {
+        console.error('Error deleting notice:', error);
+        const errorMessage = error.response?.data?.message || error.message || 'Failed to delete notice';
+        showMessage(errorMessage, 'error');
+      }
     }
   };
 
   const handleView = (notice: Notice) => {
+    const blockName = typeof notice.block === 'object' && notice.block ? (notice.block as any).name : 'N/A';
+    const unitNumber = typeof notice.unit === 'object' && notice.unit ? (notice.unit as any).unitNumber : 'N/A';
+    const publishDate = notice.publishDate ? new Date(notice.publishDate).toLocaleDateString() : 'N/A';
+    const expiryDate = notice.expiryDate ? new Date(notice.expiryDate).toLocaleDateString() : 'N/A';
+    
     alert(
-      `Notice Details:\nNotice No.: ${notice.noticeNumber}\nTitle: ${notice.title}\nCategory: ${notice.category}\nBlock: ${notice.blockName}\nUnit: ${notice.unitNumber}\nPriority: ${notice.priority}\nPublish Date: ${notice.publishDate}\nExpiry Date: ${notice.expiryDate}\nStatus: ${notice.status}`
+      `Notice Details:\nTitle: ${notice.title}\nDescription: ${notice.description || 'N/A'}\nCategory: ${notice.category}\nBlock: ${blockName}\nUnit: ${unitNumber}\nPriority: ${notice.priority}\nPublish Date: ${publishDate}\nExpiry Date: ${expiryDate}\nStatus: ${notice.status}`
     );
   };
 
   const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'Published':
+    const statusLower = status.toLowerCase();
+    switch (statusLower) {
+      case 'published':
         return <IconCheck className="w-4 h-4 text-green-600" />;
-      case 'Draft':
+      case 'draft':
         return <IconClock className="w-4 h-4 text-yellow-600" />;
-      case 'Expired':
+      case 'expired':
         return <IconX className="w-4 h-4 text-red-600" />;
-      case 'Archived':
+      case 'archived':
         return <IconArchive className="w-4 h-4 text-gray-600" />;
       default:
         return null;
@@ -230,53 +387,139 @@ export const NoticeBoardPage = () => {
   };
 
   const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'Published':
+    const statusLower = status.toLowerCase();
+    switch (statusLower) {
+      case 'published':
         return 'bg-green-100 text-green-800';
-      case 'Draft':
+      case 'draft':
         return 'bg-yellow-100 text-yellow-800';
-      case 'Expired':
+      case 'expired':
         return 'bg-red-100 text-red-800';
-      case 'Archived':
+      case 'archived':
         return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
   };
 
+  const getStatusDisplay = (status: string) => {
+    const statusLower = status.toLowerCase();
+    switch (statusLower) {
+      case 'published':
+        return 'Published';
+      case 'draft':
+        return 'Draft';
+      case 'expired':
+        return 'Expired';
+      case 'archived':
+        return 'Archived';
+      default:
+        return status;
+    }
+  };
+
   const getPriorityBadgeColor = (priority: string) => {
-    switch (priority) {
-      case 'Urgent':
+    const priorityLower = priority.toLowerCase();
+    switch (priorityLower) {
+      case 'urgent':
         return 'bg-red-100 text-red-800';
-      case 'High':
+      case 'high':
         return 'bg-orange-100 text-orange-800';
-      case 'Medium':
+      case 'medium':
         return 'bg-yellow-100 text-yellow-800';
-      case 'Low':
+      case 'low':
         return 'bg-blue-100 text-blue-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
   };
 
+  const getPriorityDisplay = (priority: string) => {
+    const priorityLower = priority.toLowerCase();
+    switch (priorityLower) {
+      case 'urgent':
+        return 'Urgent';
+      case 'high':
+        return 'High';
+      case 'medium':
+        return 'Medium';
+      case 'low':
+        return 'Low';
+      default:
+        return priority;
+    }
+  };
+
+  const getCategoryDisplay = (category: string) => {
+    const categoryLower = category.toLowerCase();
+    switch (categoryLower) {
+      case 'general':
+        return 'General';
+      case 'maintenance':
+        return 'Maintenance';
+      case 'security':
+        return 'Security';
+      case 'event':
+        return 'Event';
+      case 'other':
+        return 'Other';
+      default:
+        return category;
+    }
+  };
+
   const columns: Column<Notice>[] = [
-    { key: 'noticeNumber', header: 'Notice Number', sortable: true },
     { key: 'title', header: 'Title', sortable: true },
-    { key: 'category', header: 'Category', sortable: true },
-    { key: 'blockName', header: 'Block', sortable: true },
-    { key: 'unitNumber', header: 'Unit', sortable: true },
+    {
+      key: 'category',
+      header: 'Category',
+      sortable: true,
+      render: (notice) => getCategoryDisplay(notice.category),
+    },
+    {
+      key: 'block',
+      header: 'Block',
+      sortable: false,
+      render: (notice) => {
+        if (typeof notice.block === 'object' && notice.block) {
+          return (notice.block as any).name || 'N/A';
+        }
+        return 'N/A';
+      },
+    },
+    {
+      key: 'unit',
+      header: 'Unit',
+      sortable: false,
+      render: (notice) => {
+        if (typeof notice.unit === 'object' && notice.unit) {
+          return (notice.unit as any).unitNumber || 'N/A';
+        }
+        return 'N/A';
+      },
+    },
     {
       key: 'priority',
       header: 'Priority',
       sortable: true,
       render: (notice) => (
         <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getPriorityBadgeColor(notice.priority)}`}>
-          {notice.priority}
+          {getPriorityDisplay(notice.priority)}
         </span>
       ),
     },
-    { key: 'publishDate', header: 'Publish Date', sortable: true },
-    { key: 'expiryDate', header: 'Expiry Date', sortable: true },
+    {
+      key: 'publishDate',
+      header: 'Publish Date',
+      sortable: true,
+      render: (notice) => notice.publishDate ? new Date(notice.publishDate).toLocaleDateString() : 'N/A',
+    },
+    {
+      key: 'expiryDate',
+      header: 'Expiry Date',
+      sortable: true,
+      render: (notice) => notice.expiryDate ? new Date(notice.expiryDate).toLocaleDateString() : 'N/A',
+    },
     {
       key: 'status',
       header: 'Status',
@@ -285,7 +528,7 @@ export const NoticeBoardPage = () => {
         <div className="flex items-center gap-2">
           {getStatusIcon(notice.status)}
           <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadgeColor(notice.status)}`}>
-            {notice.status}
+            {getStatusDisplay(notice.status)}
           </span>
         </div>
       ),
@@ -298,60 +541,8 @@ export const NoticeBoardPage = () => {
     { label: 'Delete', icon: <IconTrash className="w-4 h-4" />, onClick: handleDelete, variant: 'danger' },
   ];
 
-  // Filter notices by date range, search term, and other filters
-  const filteredNotices = notices.filter((notice) => {
-    // Date filter
-    if (dateFilterFrom || dateFilterTo) {
-      const noticeDateStr = notice.publishDate.split('T')[0];
-      
-      if (dateFilterFrom && dateFilterTo) {
-        if (!(noticeDateStr >= dateFilterFrom && noticeDateStr <= dateFilterTo)) {
-          return false;
-        }
-      } else if (dateFilterFrom) {
-        if (!(noticeDateStr >= dateFilterFrom)) {
-          return false;
-        }
-      } else if (dateFilterTo) {
-        if (!(noticeDateStr <= dateFilterTo)) {
-          return false;
-        }
-      }
-    }
-
-    // Search filter
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch =
-        notice.noticeNumber.toLowerCase().includes(searchLower) ||
-        notice.title.toLowerCase().includes(searchLower) ||
-        notice.category.toLowerCase().includes(searchLower) ||
-        notice.status.toLowerCase().includes(searchLower) ||
-        notice.blockName.toLowerCase().includes(searchLower) ||
-        notice.unitNumber.toLowerCase().includes(searchLower) ||
-        notice.priority.toLowerCase().includes(searchLower);
-      
-      if (!matchesSearch) {
-        return false;
-      }
-    }
-
-    // Other filters
-    if (selectedFilters.category && notice.category !== selectedFilters.category) {
-      return false;
-    }
-    if (selectedFilters.blockName && notice.blockName !== selectedFilters.blockName) {
-      return false;
-    }
-    if (selectedFilters.priority && notice.priority !== selectedFilters.priority) {
-      return false;
-    }
-    if (selectedFilters.status && notice.status !== selectedFilters.status) {
-      return false;
-    }
-
-    return true;
-  });
+  // Filtering is mostly done server-side, but we apply additional filters client-side
+  const filteredNotices = notices;
 
   const handleClearDateFilter = () => {
     setDateFilterFrom('');
@@ -461,9 +652,7 @@ export const NoticeBoardPage = () => {
                     onChange={(value) => handleFilterChange('category', value)}
                     options={[
                       { value: '', label: 'All Category' },
-                      ...Array.from(new Set(notices.map((n) => n.category)))
-                        .sort()
-                        .map((option) => ({ value: option, label: option })),
+                      ...categoryOptions,
                     ]}
                     placeholder="All Category"
                     disabled={false}
@@ -477,9 +666,7 @@ export const NoticeBoardPage = () => {
                     onChange={(value) => handleFilterChange('blockName', value)}
                     options={[
                       { value: '', label: 'All Blocks' },
-                      ...Array.from(new Set(notices.map((n) => n.blockName)))
-                        .sort()
-                        .map((option) => ({ value: option, label: option })),
+                      ...blockOptions,
                     ]}
                     placeholder="All Blocks"
                     disabled={false}
@@ -493,9 +680,7 @@ export const NoticeBoardPage = () => {
                     onChange={(value) => handleFilterChange('priority', value)}
                     options={[
                       { value: '', label: 'All Priority' },
-                      ...Array.from(new Set(notices.map((n) => n.priority)))
-                        .sort()
-                        .map((option) => ({ value: option, label: option })),
+                      ...priorityOptions,
                     ]}
                     placeholder="All Priority"
                     disabled={false}
@@ -509,9 +694,7 @@ export const NoticeBoardPage = () => {
                     onChange={(value) => handleFilterChange('status', value)}
                     options={[
                       { value: '', label: 'All Status' },
-                      ...Array.from(new Set(notices.map((n) => n.status)))
-                        .sort()
-                        .map((option) => ({ value: option, label: option })),
+                      ...statusOptions,
                     ]}
                     placeholder="All Status"
                     disabled={false}
@@ -520,14 +703,22 @@ export const NoticeBoardPage = () => {
               </div>
             </div>
 
-            <DataTable
-              data={filteredNotices}
-              columns={columns}
-              actions={actions}
-              searchable={false}
-              filterable={false}
-              emptyMessage="No notices found"
-            />
+            {loading ? (
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <div className="text-center py-12">
+                  <p className="text-lg font-semibold text-gray-600 mb-2">Loading notices...</p>
+                </div>
+              </div>
+            ) : (
+              <DataTable
+                data={filteredNotices}
+                columns={columns}
+                actions={actions}
+                searchable={false}
+                filterable={false}
+                emptyMessage="No notices found"
+              />
+            )}
           </div>
         )}
 
@@ -556,22 +747,7 @@ export const NoticeBoardPage = () => {
             <div className="mb-8">
               <h3 className="text-lg font-semibold text-primary-black mb-6">Notice Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label htmlFor="noticeNumber" className="block text-sm font-medium text-gray-700 mb-1">
-                    Notice Number <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="noticeNumber"
-                    {...register('noticeNumber')}
-                    className="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-gray-900 focus:ring-0 bg-transparent"
-                    placeholder="Enter notice number (e.g., NB-001)"
-                  />
-                  {errors.noticeNumber && (
-                    <p className="mt-1 text-sm text-red-500">{errors.noticeNumber.message as string}</p>
-                  )}
-                </div>
-                <div>
+                <div className="md:col-span-2">
                   <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
                     Title <span className="text-red-500">*</span>
                   </label>
@@ -610,11 +786,14 @@ export const NoticeBoardPage = () => {
                     id="blockId"
                     name="blockId"
                     value={watch('blockId') || ''}
-                    onChange={(value) => setValue('blockId', value, { shouldValidate: true })}
+                    onChange={(value) => {
+                      setValue('blockId', value, { shouldValidate: true });
+                      // Unit will be reset automatically by the useEffect watching blockId
+                    }}
                     options={blockOptions}
-                    placeholder="Select block"
+                    placeholder={loadingBlocks ? 'Loading blocks...' : 'Select block'}
                     error={errors.blockId?.message as string}
-                    disabled={false}
+                    disabled={loadingBlocks}
                     required
                   />
                 </div>
@@ -628,9 +807,17 @@ export const NoticeBoardPage = () => {
                     value={watch('unitId') || ''}
                     onChange={(value) => setValue('unitId', value, { shouldValidate: true })}
                     options={unitOptions}
-                    placeholder="Select unit"
+                    placeholder={
+                      !watch('blockId') 
+                        ? 'Select block first' 
+                        : loadingUnits 
+                          ? 'Loading units...' 
+                          : unitOptions.length === 0 
+                            ? 'No units available' 
+                            : 'Select unit'
+                    }
                     error={errors.unitId?.message as string}
-                    disabled={false}
+                    disabled={loadingUnits || !watch('blockId')}
                     required
                   />
                 </div>
@@ -721,9 +908,10 @@ export const NoticeBoardPage = () => {
               </button>
               <button
                 type="submit"
-                className="px-6 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
+                disabled={submitting}
+                className="px-6 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {editingNotice ? 'Update Notice' : 'Save Notice'}
+                {submitting ? 'Saving...' : editingNotice ? 'Update Notice' : 'Save Notice'}
               </button>
             </div>
           </form>

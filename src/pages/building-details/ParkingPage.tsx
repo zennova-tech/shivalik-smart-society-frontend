@@ -6,6 +6,20 @@ import { parkingSchema } from '../../utils/validationSchemas/parkingSchema';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { IconEdit, IconTrash, IconEye, IconCar, IconUsers, IconSearch } from '@tabler/icons-react';
+import {
+  getParkingBySocietyApi,
+  getParkingByIdApi,
+  addParkingApi,
+  updateParkingApi,
+  deleteParkingApi,
+  Parking,
+  GetParkingParams,
+  AddParkingPayload,
+  UpdateParkingPayload,
+} from '../../apis/parking';
+import { getBuildingApi } from '../../apis/building';
+import { getSocietyId } from '../../utils/societyUtils';
+import { showMessage } from '../../utils/Constant';
 
 // Bike Icon Component
 const BikeIcon = ({ className }: { className?: string }) => (
@@ -35,57 +49,106 @@ const BikeIcon = ({ className }: { className?: string }) => (
 
 type ParkingFormData = Yup.InferType<typeof parkingSchema>;
 
-interface Parking {
-  id: string;
-  parkingName: string;
-  bikeSlotMember: number;
-  carSlotMember: number;
-  bikeSlotVisitor: number;
-  carSlotVisitor: number;
-}
-
 interface SlotCard {
   number: number;
   vehicleType: 'Car' | 'Bike';
   userType: 'Member' | 'Visitor';
 }
 
-// Mock parking data - replace with actual API call
-const mockParkings: Parking[] = [
-  {
-    id: '1',
-    parkingName: 'Main Parking Area',
-    bikeSlotMember: 10,
-    carSlotMember: 20,
-    bikeSlotVisitor: 5,
-    carSlotVisitor: 10,
-  },
-  {
-    id: '2',
-    parkingName: 'Basement Parking',
-    bikeSlotMember: 15,
-    carSlotMember: 30,
-    bikeSlotVisitor: 8,
-    carSlotVisitor: 15,
-  },
-];
-
 export const ParkingPage = () => {
-  const [parkings, setParkings] = useState<Parking[]>(mockParkings);
+  const [parkings, setParkings] = useState<Parking[]>([]);
+  const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingParking, setEditingParking] = useState<Parking | null>(null);
   const [viewingParking, setViewingParking] = useState<Parking | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
+  const [defaultBuildingId, setDefaultBuildingId] = useState<string | null>(null);
+  const [loadingBuilding, setLoadingBuilding] = useState(false);
 
   useEffect(() => {
     document.title = 'Parking - Smart Society';
+    fetchDefaultBuilding();
+    fetchParkings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (searchTerm === '') {
+      fetchParkings();
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      fetchParkings();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
+
+  const fetchDefaultBuilding = async () => {
+    try {
+      setLoadingBuilding(true);
+      const societyId = getSocietyId();
+      if (!societyId) {
+        showMessage('Society ID not found. Please select a society first.', 'error');
+        return;
+      }
+
+      const buildingResponse = await getBuildingApi(societyId);
+      
+      let buildings: any[] = [];
+      if (buildingResponse && typeof buildingResponse === 'object') {
+        if (Array.isArray(buildingResponse.items)) {
+          buildings = buildingResponse.items;
+        } else if (buildingResponse._id) {
+          buildings = [buildingResponse];
+        } else if (Array.isArray(buildingResponse)) {
+          buildings = buildingResponse;
+        }
+      }
+
+      const activeBuilding = buildings.find((b: any) => b.status === 'active') || buildings[0];
+      
+      if (activeBuilding) {
+        const buildingId = activeBuilding._id || activeBuilding.id;
+        setDefaultBuildingId(buildingId);
+      } else {
+        showMessage('No building found for this society. Please create a building first.', 'error');
+      }
+    } catch (error: any) {
+      console.error('Error fetching building:', error);
+      showMessage('Failed to fetch building. Please ensure a building exists for this society.', 'error');
+    } finally {
+      setLoadingBuilding(false);
+    }
+  };
+
+  const fetchParkings = async () => {
+    try {
+      setLoading(true);
+      const params: GetParkingParams = {
+        q: searchTerm || undefined,
+        limit: 500,
+      };
+
+      const response = await getParkingBySocietyApi(params);
+      setParkings(response.items || []);
+    } catch (error: any) {
+      console.error('Error fetching parkings:', error);
+      showMessage('Failed to fetch parkings', 'error');
+      setParkings([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
+    setValue,
   } = useForm<ParkingFormData>({
     resolver: yupResolver(parkingSchema),
     defaultValues: {
@@ -97,62 +160,98 @@ export const ParkingPage = () => {
     },
   });
 
-  const onSubmit = (data: ParkingFormData) => {
-    console.log('Form submitted:', data);
-    if (editingParking) {
-      setParkings(
-        parkings.map((parking) =>
-          parking.id === editingParking.id
-            ? {
-                ...parking,
-                parkingName: data.parkingName,
-                bikeSlotMember: data.bikeSlotMember,
-                carSlotMember: data.carSlotMember,
-                bikeSlotVisitor: data.bikeSlotVisitor,
-                carSlotVisitor: data.carSlotVisitor,
-              }
-            : parking
-        )
-      );
-      setEditingParking(null);
-    } else {
-      const newParking: Parking = {
-        id: Date.now().toString(),
-        parkingName: data.parkingName,
-        bikeSlotMember: data.bikeSlotMember,
-        carSlotMember: data.carSlotMember,
-        bikeSlotVisitor: data.bikeSlotVisitor,
-        carSlotVisitor: data.carSlotVisitor,
-      };
-      setParkings([...parkings, newParking]);
+  // Update form default values when building is loaded
+  useEffect(() => {
+    if (defaultBuildingId) {
+      // Building ID is set at API level, not form level for parking
     }
-    reset({
-      parkingName: '',
-      bikeSlotMember: 0,
-      carSlotMember: 0,
-      bikeSlotVisitor: 0,
-      carSlotVisitor: 0,
-    });
-    setShowForm(false);
-    alert(editingParking ? 'Parking updated successfully!' : 'Parking added successfully!');
+  }, [defaultBuildingId]);
+
+  const onSubmit = async (data: ParkingFormData) => {
+    try {
+      setSubmitting(true);
+      
+      if (!defaultBuildingId) {
+        showMessage('Building ID not found. Please ensure a building exists for this society.', 'error');
+        return;
+      }
+
+      if (editingParking) {
+        const updatePayload: UpdateParkingPayload = {
+          id: editingParking._id,
+          name: data.parkingName,
+          memberCarSlots: data.carSlotMember,
+          memberBikeSlots: data.bikeSlotMember,
+          visitorCarSlots: data.carSlotVisitor,
+          visitorBikeSlots: data.bikeSlotVisitor,
+          building: defaultBuildingId,
+        };
+        
+        await updateParkingApi(updatePayload);
+        showMessage('Parking updated successfully!', 'success');
+      } else {
+        const addPayload: AddParkingPayload = {
+          name: data.parkingName,
+          memberCarSlots: data.carSlotMember,
+          memberBikeSlots: data.bikeSlotMember,
+          visitorCarSlots: data.carSlotVisitor,
+          visitorBikeSlots: data.bikeSlotVisitor,
+          building: defaultBuildingId,
+          status: 'active',
+        };
+        
+        await addParkingApi(addPayload);
+        showMessage('Parking added successfully!', 'success');
+      }
+      
+      reset({
+        parkingName: '',
+        bikeSlotMember: 0,
+        carSlotMember: 0,
+        bikeSlotVisitor: 0,
+        carSlotVisitor: 0,
+      });
+      setShowForm(false);
+      setEditingParking(null);
+      fetchParkings();
+    } catch (error: any) {
+      console.error('Error saving parking:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to save parking';
+      showMessage(errorMessage, 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleEdit = (parking: Parking) => {
-    setEditingParking(parking);
-    reset({
-      parkingName: parking.parkingName,
-      bikeSlotMember: parking.bikeSlotMember,
-      carSlotMember: parking.carSlotMember,
-      bikeSlotVisitor: parking.bikeSlotVisitor,
-      carSlotVisitor: parking.carSlotVisitor,
-    });
-    setShowForm(true);
+  const handleEdit = async (parking: Parking) => {
+    try {
+      const fullParking = await getParkingByIdApi(parking._id);
+      setEditingParking(fullParking);
+      reset({
+        parkingName: fullParking.name,
+        bikeSlotMember: fullParking.memberBikeSlots,
+        carSlotMember: fullParking.memberCarSlots,
+        bikeSlotVisitor: fullParking.visitorBikeSlots,
+        carSlotVisitor: fullParking.visitorCarSlots,
+      });
+      setShowForm(true);
+    } catch (error: any) {
+      console.error('Error fetching parking details:', error);
+      showMessage('Failed to fetch parking details', 'error');
+    }
   };
 
-  const handleDelete = (parking: Parking) => {
-    if (window.confirm(`Are you sure you want to delete ${parking.parkingName}?`)) {
-      setParkings(parkings.filter((p) => p.id !== parking.id));
-      alert('Parking deleted successfully!');
+  const handleDelete = async (parking: Parking) => {
+    if (window.confirm(`Are you sure you want to delete ${parking.name}?`)) {
+      try {
+        await deleteParkingApi({ id: parking._id });
+        showMessage('Parking deleted successfully!', 'success');
+        fetchParkings();
+      } catch (error: any) {
+        console.error('Error deleting parking:', error);
+        const errorMessage = error.response?.data?.message || error.message || 'Failed to delete parking';
+        showMessage(errorMessage, 'error');
+      }
     }
   };
 
@@ -165,21 +264,21 @@ export const ParkingPage = () => {
     
     if (userType === 'Member') {
       if (vehicleType === 'Bike') {
-        for (let i = 1; i <= parking.bikeSlotMember; i++) {
+        for (let i = 1; i <= parking.memberBikeSlots; i++) {
           slots.push({ number: i, vehicleType: 'Bike', userType: 'Member' });
         }
       } else {
-        for (let i = 1; i <= parking.carSlotMember; i++) {
+        for (let i = 1; i <= parking.memberCarSlots; i++) {
           slots.push({ number: i, vehicleType: 'Car', userType: 'Member' });
         }
       }
     } else {
       if (vehicleType === 'Bike') {
-        for (let i = 1; i <= parking.bikeSlotVisitor; i++) {
+        for (let i = 1; i <= parking.visitorBikeSlots; i++) {
           slots.push({ number: i, vehicleType: 'Bike', userType: 'Visitor' });
         }
       } else {
-        for (let i = 1; i <= parking.carSlotVisitor; i++) {
+        for (let i = 1; i <= parking.visitorCarSlots; i++) {
           slots.push({ number: i, vehicleType: 'Car', userType: 'Visitor' });
         }
       }
@@ -188,13 +287,8 @@ export const ParkingPage = () => {
     return slots;
   };
 
-  const filteredParkings = parkings.filter((parking) => {
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      return parking.parkingName.toLowerCase().includes(searchLower);
-    }
-    return true;
-  });
+  // Filtering is done server-side via API, but we can add client-side filtering if needed
+  const filteredParkings = parkings;
 
 
   const SlotCard = ({ slot }: { slot: SlotCard }) => {
@@ -297,7 +391,7 @@ export const ParkingPage = () => {
         {viewingParking && (
           <div className="bg-white rounded-lg border border-gray-200 p-6 lg:p-8 mb-6">
             <div className="mb-6 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-primary-black">{viewingParking.parkingName}</h2>
+              <h2 className="text-2xl font-bold text-primary-black">{viewingParking.name}</h2>
               <button
                 onClick={() => setViewingParking(null)}
                 className="text-gray-400 hover:text-gray-600"
@@ -347,14 +441,22 @@ export const ParkingPage = () => {
             </div>
 
             {/* Parking Cards Grid */}
-            {filteredParkings.length > 0 ? (
+            {loading ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-center py-12">
+                    <p className="text-lg font-semibold text-gray-600 mb-2">Loading parking areas...</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : filteredParkings.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredParkings.map((parking) => {
-                  const totalSlots = parking.bikeSlotMember + parking.carSlotMember + parking.bikeSlotVisitor + parking.carSlotVisitor;
+                  const totalSlots = parking.memberBikeSlots + parking.memberCarSlots + parking.visitorBikeSlots + parking.visitorCarSlots;
                   
                   return (
                     <Card
-                      key={parking.id}
+                      key={parking._id}
                       className="hover:shadow-lg transition-shadow duration-200 border border-gray-200 bg-primary-white"
                     >
                       <CardHeader>
@@ -365,7 +467,7 @@ export const ParkingPage = () => {
                             </div>
                             <div className="flex-1">
                               <CardTitle className="text-lg font-semibold text-primary-black">
-                                {parking.parkingName}
+                                {parking.name}
                               </CardTitle>
                             </div>
                           </div>
@@ -387,7 +489,7 @@ export const ParkingPage = () => {
                                 <BikeIcon className="w-4 h-4 text-green-600" />
                                 <span className="text-xs font-medium text-gray-600">Bike (Member)</span>
                               </div>
-                              <p className="text-xl font-bold text-primary-black">{parking.bikeSlotMember}</p>
+                              <p className="text-xl font-bold text-primary-black">{parking.memberBikeSlots}</p>
                             </div>
 
                             {/* Car Slots Member */}
@@ -396,7 +498,7 @@ export const ParkingPage = () => {
                                 <IconCar className="w-4 h-4 text-blue-600" />
                                 <span className="text-xs font-medium text-gray-600">Car (Member)</span>
                               </div>
-                              <p className="text-xl font-bold text-primary-black">{parking.carSlotMember}</p>
+                              <p className="text-xl font-bold text-primary-black">{parking.memberCarSlots}</p>
                             </div>
 
                             {/* Bike Slots Visitor */}
@@ -405,7 +507,7 @@ export const ParkingPage = () => {
                                 <BikeIcon className="w-4 h-4 text-green-600" />
                                 <span className="text-xs font-medium text-gray-600">Bike (Visitor)</span>
                               </div>
-                              <p className="text-xl font-bold text-primary-black">{parking.bikeSlotVisitor}</p>
+                              <p className="text-xl font-bold text-primary-black">{parking.visitorBikeSlots}</p>
                             </div>
 
                             {/* Car Slots Visitor */}
@@ -414,7 +516,7 @@ export const ParkingPage = () => {
                                 <IconCar className="w-4 h-4 text-blue-600" />
                                 <span className="text-xs font-medium text-gray-600">Car (Visitor)</span>
                               </div>
-                              <p className="text-xl font-bold text-primary-black">{parking.carSlotVisitor}</p>
+                              <p className="text-xl font-bold text-primary-black">{parking.visitorCarSlots}</p>
                             </div>
                           </div>
 
@@ -424,14 +526,14 @@ export const ParkingPage = () => {
                               <IconUsers className="w-4 h-4 text-purple-600" />
                               <span className="text-xs text-gray-600">Members:</span>
                               <span className="text-sm font-semibold text-primary-black">
-                                {parking.bikeSlotMember + parking.carSlotMember}
+                                {parking.memberBikeSlots + parking.memberCarSlots}
                               </span>
                             </div>
                             <div className="flex items-center gap-2">
                               <IconUsers className="w-4 h-4 text-orange-600" />
                               <span className="text-xs text-gray-600">Visitors:</span>
                               <span className="text-sm font-semibold text-primary-black">
-                                {parking.bikeSlotVisitor + parking.carSlotVisitor}
+                                {parking.visitorBikeSlots + parking.visitorCarSlots}
                               </span>
                             </div>
                           </div>
@@ -621,9 +723,10 @@ export const ParkingPage = () => {
               </button>
               <button
                 type="submit"
-                className="px-6 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
+                disabled={submitting}
+                className="px-6 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {editingParking ? 'Update Parking' : 'Save Parking'}
+                {submitting ? 'Saving...' : editingParking ? 'Update Parking' : 'Save Parking'}
               </button>
             </div>
           </form>

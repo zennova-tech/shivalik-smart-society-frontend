@@ -62,7 +62,7 @@ export const MembersPage = () => {
       const response = await getUnitsApi({ 
         block: blockId, 
         status: 'active',
-        limit: 1000 
+        limit: 500 
       });
       setUnits(response.items || []);
     } catch (error: any) {
