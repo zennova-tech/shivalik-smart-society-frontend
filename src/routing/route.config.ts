@@ -37,6 +37,8 @@ export const ROLE_ROUTES: Record<string, string[]> = {
     '/building-settings/amenities',
     '/employees',
     '/users/members',
+    '/maintenance-bill/add-bill',
+    '/maintenance-bill/view',
     // Legacy routes for backward compatibility
     '/building-details',
     '/floors',
@@ -57,6 +59,8 @@ export const ROLE_ROUTES: Record<string, string[]> = {
     '/building-settings/amenities',
     '/employees',
     '/users/members',
+    '/maintenance-bill/add-bill',
+    '/maintenance-bill/view',
     // Legacy routes for backward compatibility
     '/building-details',
     '/floors',
@@ -115,7 +119,6 @@ const BASE_MENU_ITEMS: MenuItem[] = [
     roles: ['SuperAdmin', 'Manager'],
     subItems: [
       { name: 'Add Bill', href: '/maintenance-bill/add-bill' },
-      { name: 'Add Maintenance', href: '/maintenance-bill/add-maintenance' },
       { name: 'View Maintenance & Bill', href: '/maintenance-bill/view' },
     ],
   },

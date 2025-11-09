@@ -7,7 +7,7 @@ import {
   IconMenu2,
   IconX,
   IconSearch,
-} from '@tabler/icons-react';
+  } from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { getMenuItemsForRole, MenuItem } from '../../routing/route.config';
@@ -209,11 +209,11 @@ export const DashboardLayout = () => {
       // Don't toggle - just ensure it's open
       setTabOpenStates((prev) => {
         const isCurrentlyOpen = !!prev[item.href];
-        // Only open if currently closed, don't close if already open
+        const newState = { ...prev, [item.href]: !isCurrentlyOpen };
+        localStorage.setItem('tabOpenStates', JSON.stringify(newState));
+        
+        // If opening and no sub-item is currently active, navigate to first sub-item
         if (!isCurrentlyOpen) {
-          const newState = { ...prev, [item.href]: true };
-          localStorage.setItem('tabOpenStates', JSON.stringify(newState));
-          // Navigate to first sub-item only if no sub-item is currently active
           const isSubItemActive = item.subItems?.some((sub) => location.pathname === sub.href);
           if (!isSubItemActive && item.subItems && item.subItems.length > 0) {
             const targetPath = item.subItems[0].href;
@@ -221,10 +221,8 @@ export const DashboardLayout = () => {
             setActivePath(targetPath);
             localStorage.setItem('lastActivePath', targetPath);
           }
-          return newState;
         }
-        // If already open, do nothing - don't toggle
-        return prev;
+        return newState;
       });
     } else {
       navigate(item.href);
@@ -296,28 +294,51 @@ export const DashboardLayout = () => {
           ${hasSubItems ? 'mb-1 min-h-[48px]' : 'mb-0'}
           ${hasSubItems ? 'cursor-default' : 'cursor-pointer'}
         `}
-        onClick={() => handleTabClick(item)}
         title={!shouldShowText ? item.name : undefined}
       >
-        <div className={`flex items-center gap-3 relative z-10 ${shouldShowText ? 'justify-start' : 'justify-center'}`}>
+        <div
+          className={`flex items-center gap-3 relative z-10 ${shouldShowText ? 'justify-start' : 'justify-center'} ${!hasSubItems ? 'cursor-pointer' : ''}`}
+          onClick={() => {
+            if (!hasSubItems) {
+              handleTabClick(item);
+            }
+          }}
+        >
           <item.icon size={20} />
           {shouldShowText && (
             <>
-              <span className={`text-sm ${isActive ? 'font-medium' : 'font-normal'}`}>{item.name}</span>
+              <span
+                className={`text-sm flex-1 ${isActive ? 'font-medium' : 'font-normal'} ${hasSubItems ? 'cursor-pointer' : ''}`}
+                onClick={() => {
+                  if (hasSubItems) {
+                    handleTabClick(item);
+                  }
+                }}
+              >
+                {item.name}
+              </span>
               {hasSubItems && (
-                <div
-                  className={`ml-auto ${
-                    tabOpenStates[item.href] ? 'rotate-180' : 'rotate-0'
-                  }`}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleTabClick(item);
+                  }}
+                  className="ml-auto focus:outline-none p-1 hover:bg-primary-gray/20 rounded"
                 >
-                  <IconCaretDown size={16} />
-                </div>
+                  <IconCaretDown
+                    size={16}
+                    className={`transition-transform duration-200 ${
+                      tabOpenStates[item.href] ? 'rotate-180' : 'rotate-0'
+                    }`}
+                  />
+                </button>
               )}
             </>
           )}
         </div>
         {hasSubItems && tabOpenStates[item.href] && shouldShowText && (
-          <ul className="mt-2 pt-3 pl-7 list-none">
+          <ul className="mt-0 pt-2 pb-2 pl-7 pr-3 list-none">
             {item.subItems.map((subItem) => (
               <li
                 key={subItem.name}
@@ -326,7 +347,7 @@ export const DashboardLayout = () => {
                   text-xs
                   ${activePath === subItem.href || activePath.startsWith(subItem.href + '/') ? 'font-medium' : 'font-normal'}
                   cursor-pointer rounded
-                  mb-2 flex items-center
+                  mb-1 flex items-center
                   hover:bg-primary-gray/20
                 `}
                 onClick={(e) => {

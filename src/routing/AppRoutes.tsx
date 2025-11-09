@@ -18,6 +18,8 @@ import SocietyManagement from '../pages/society-management/SocietyManagement';
 import { MembersPage } from '../pages/users/MembersPage';
 import CommitteeMembersPage from '../pages/users/CommitteeMembersPage';
 import EmployeesPage from '../pages/employees/EmployeesPage';
+import { AddBillPage } from '../pages/maintenance-bill/AddBillPage';
+import { ViewBillsPage } from '../pages/maintenance-bill/ViewBillsPage';
 
 /* current user roles */
 const getUserRoles = (): string => {
@@ -152,6 +154,10 @@ export const AppRoutes = () => {
         {/* Employees Routes */}
         <Route path="users/society-employee" element={<EmployeesPage />} />
         <Route path="users/committee-member" element={<CommitteeMembersPage />} />
+        
+        {/* Maintenance & Bills Routes */}
+        <Route path="maintenance-bill/add-bill" element={<AddBillPage />} />
+        <Route path="maintenance-bill/view" element={<ViewBillsPage />} />
         
         {/* Legacy routes for backward compatibility - redirect to new paths */}
         <Route path="building-details" element={<Navigate to="/building-settings/building-details" replace />} />
