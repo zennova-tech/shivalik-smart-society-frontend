@@ -29,13 +29,14 @@ import {
   IconCheck,
   IconPlus,
   IconX,
-  IconUser
+  IconUser,
+  IconTrash
 } from '@tabler/icons-react';
 import { Society, AddSocietyPayload } from '@/types/SocietyTypes';
 import { setToLocalStorage, getFromLocalStorage } from '@/utils/localstorage';
 import { showMessage } from '@/utils/Constant';
 import { societySchema } from '@/utils/validationSchemas/societySchema';
-import { addSociety, resetAddSociety, getSocieties, resetGetSocieties } from '@/store/slices/societySlice';
+import { addSociety, resetAddSociety, getSocieties, resetGetSocieties, deleteSociety, resetDeleteSociety } from '@/store/slices/societySlice';
 import { AppDispatch, RootState } from '@/store/store';
 
 // Extended interface for additional details
@@ -60,6 +61,8 @@ const SocietyManagement = () => {
   const [currentSelectedSociety, setCurrentSelectedSociety] = useState<Society | null>(null);
   const [projectOption, setProjectOption] = useState<'select' | 'create'>('select');
   const [projectId, setProjectId] = useState<string>('');
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [societyToDelete, setSocietyToDelete] = useState<Society | null>(null);
 
   // Get Redux state
   const { 
@@ -70,6 +73,8 @@ const SocietyManagement = () => {
   
   // Track if we're currently adding a society (to differentiate status)
   const [isAddingSociety, setIsAddingSociety] = useState(false);
+  // Track if we're currently deleting a society (to differentiate status)
+  const [isDeletingSociety, setIsDeletingSociety] = useState(false);
 
   const {
     register,
@@ -140,6 +145,26 @@ const SocietyManagement = () => {
     }
   }, [status, error, isAddingSociety, societies.length]);
 
+  // Handle delete society success/error
+  useEffect(() => {
+    if (isDeletingSociety) {
+      if (status === 'complete') {
+        showMessage('Society deleted successfully', 'success');
+        setIsDeleteDialogOpen(false);
+        setSocietyToDelete(null);
+        setIsDeletingSociety(false);
+        dispatch(resetDeleteSociety());
+        
+        // Refresh societies list after deleting
+        dispatch(getSocieties());
+      } else if (status === 'failed') {
+        showMessage(error || 'Failed to delete society', 'error');
+        setIsDeletingSociety(false);
+        dispatch(resetDeleteSociety());
+      }
+    }
+  }, [status, error, isDeletingSociety, dispatch]);
+
   const handleSocietyClick = (society: Society) => {
     // Use data from API response
     const details: SocietyDetails = {
@@ -200,6 +225,33 @@ const SocietyManagement = () => {
     // Dispatch Redux action to create society
     setIsAddingSociety(true);
     dispatch(addSociety(payload));
+  };
+
+  const handleDeleteClick = (society: Society, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click event
+    setSocietyToDelete(society);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (societyToDelete && societyToDelete.id) {
+      const deletedSocietyId = societyToDelete.id;
+      setIsDeletingSociety(true);
+      dispatch(deleteSociety({ id: deletedSocietyId }));
+      
+      // If the deleted society was the currently selected one, clear it from localStorage
+      if (currentSelectedSociety?.id === deletedSocietyId) {
+        localStorage.removeItem('selectedSociety');
+        setCurrentSelectedSociety(null);
+        // Dispatch event to notify other components
+        window.dispatchEvent(new Event('societySelected'));
+      }
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setIsDeleteDialogOpen(false);
+    setSocietyToDelete(null);
   };
 
   const filteredSocieties = (societies || []).filter((society) =>
@@ -282,7 +334,7 @@ const SocietyManagement = () => {
       </div>
 
       {/* Loading State */}
-      {status === 'loading' && !isAddingSociety && societies.length === 0 && (
+      {status === 'loading' && !isAddingSociety && !isDeletingSociety && societies.length === 0 && (
         <Card>
           <CardContent className="pt-6">
             <div className="text-center py-12">
@@ -294,7 +346,7 @@ const SocietyManagement = () => {
       )}
 
       {/* Error State */}
-      {status === 'failed' && !isAddingSociety && filteredSocieties.length === 0 && (
+      {status === 'failed' && !isAddingSociety && !isDeletingSociety && filteredSocieties.length === 0 && (
         <Card>
           <CardContent className="pt-6">
             <div className="text-center py-12">
@@ -313,7 +365,7 @@ const SocietyManagement = () => {
       )}
 
       {/* Societies Grid */}
-      {status !== 'loading' && !isAddingSociety && filteredSocieties.length > 0 ? (
+      {status !== 'loading' && !isAddingSociety && !isDeletingSociety && filteredSocieties.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredSocieties.map((society) => (
             <Card
@@ -377,18 +429,29 @@ const SocietyManagement = () => {
               </div>
               <CardFooter className="pt-0 mt-auto">
                 {currentSelectedSociety && currentSelectedSociety.id && String(currentSelectedSociety.id) === String(society.id) ? (
-                  <Button
-                    variant="outline"
-                    className="w-full bg-green-50 text-green-700 border-green-300 hover:bg-green-100 cursor-not-allowed"
-                    disabled
-                  >
-                    <IconCheck className="w-4 h-4 mr-2" />
-                    Currently Selected
-                  </Button>
-                ) : (
-                  <div className="flex flex-col gap-2 w-full">
+                  <div className="grid grid-cols-1 gap-2 w-full">
                     <Button
-                      className="w-full bg-primary-black text-white hover:bg-gray-800"
+                      variant="outline"
+                      className="w-full bg-green-50 text-green-700 border-green-300 hover:bg-green-100 cursor-not-allowed"
+                      disabled
+                    >
+                      <IconCheck className="w-4 h-4 mr-2" />
+                      Currently Selected
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full text-red-600 hover:text-red-700 hover:border-red-300"
+                      onClick={(e) => handleDeleteClick(society, e)}
+                      disabled={isDeletingSociety}
+                    >
+                      <IconTrash className="w-4 h-4 mr-2" />
+                      Delete
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 w-full">
+                    <Button
+                      className="col-span-2 bg-primary-black text-white hover:bg-gray-800"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleSelectSociety(society);
@@ -406,7 +469,16 @@ const SocietyManagement = () => {
                       }}
                     >
                       <IconEye className="w-4 h-4 mr-2" />
-                      View Details
+                      View
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full text-red-600 hover:text-red-700 hover:border-red-300"
+                      onClick={(e) => handleDeleteClick(society, e)}
+                      disabled={isDeletingSociety}
+                    >
+                      <IconTrash className="w-4 h-4 mr-2" />
+                      Delete
                     </Button>
                   </div>
                 )}
@@ -414,7 +486,7 @@ const SocietyManagement = () => {
             </Card>
           ))}
         </div>
-      ) : status !== 'loading' && status !== 'failed' && !isAddingSociety ? (
+      ) : status !== 'loading' && status !== 'failed' && !isAddingSociety && !isDeletingSociety ? (
         <Card>
           <CardContent className="pt-6">
             <div className="text-center py-12">
@@ -888,6 +960,65 @@ const SocietyManagement = () => {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => {
+        setIsDeleteDialogOpen(open);
+        if (!open && !isDeletingSociety) {
+          setSocietyToDelete(null);
+        }
+      }}>
+        <DialogContent className="max-w-md bg-primary-white">
+          <DialogHeader>
+            <DialogTitle className="text-xl text-red-600">Delete Society</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this society? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {societyToDelete && (
+            <div className="py-4">
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <p className="text-sm font-medium text-gray-700 mb-1">Society Name:</p>
+                <p className="text-base font-semibold text-gray-900">{societyToDelete.name}</p>
+                {societyToDelete.address && (
+                  <>
+                    <p className="text-sm font-medium text-gray-700 mb-1 mt-3">Address:</p>
+                    <p className="text-sm text-gray-600">{societyToDelete.address}</p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
+            <Button 
+              variant="outline"
+              className="flex-1 bg-red-50 text-red-600 border-red-300 hover:bg-red-100"
+              onClick={handleConfirmDelete}
+              disabled={status === 'loading' && isDeletingSociety}
+            >
+              {status === 'loading' && isDeletingSociety ? (
+                <>Deleting...</>
+              ) : (
+                <>
+                  <IconTrash className="w-4 h-4 mr-2" />
+                  Delete
+                </>
+              )}
+            </Button>
+            <Button 
+              variant="outline"
+              className="flex-1"
+              onClick={handleCancelDelete}
+              disabled={status === 'loading' && isDeletingSociety}
+            >
+              <IconX className="w-4 h-4 mr-2" />
+              Cancel
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
