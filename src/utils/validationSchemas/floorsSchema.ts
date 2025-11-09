@@ -10,22 +10,15 @@ export const floorsSchema = Yup.object().shape({
   floorName: Yup.string()
     .required('Floor Name is required')
     .trim()
+    .max(200, 'Floor Name must be less than 200 characters')
     .test('no-whitespace', 'Floor Name cannot be only whitespace', (value) =>
       value ? value.trim() !== '' : false
     ),
-  description: Yup.string()
-    .trim()
-    .notRequired(),
-  totalUnits: Yup.number()
-    .required('Total Units is required')
-    .integer('Total Units must be a whole number')
-    .min(0, 'Total Units cannot be negative')
-    .typeError('Total Units must be a number'),
   blockId: Yup.string()
     .required('Block is required')
     .trim(),
   status: Yup.string()
     .required('Status is required')
-    .oneOf(['Active', 'Inactive', 'Under Construction'], 'Please select a valid status'),
+    .oneOf(['active', 'inactive'], 'Status must be either active or inactive'),
 });
 

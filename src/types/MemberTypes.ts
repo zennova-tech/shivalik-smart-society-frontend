@@ -73,6 +73,7 @@ export interface GetMembersPayload {
   limit?: number;
   search?: string;
   society?: string;
+  unitId?: string;
   [key: string]: any;
 }
 

@@ -5,84 +5,148 @@ import * as Yup from 'yup';
 import { floorsSchema } from '../../utils/validationSchemas/floorsSchema';
 import { CustomSelect } from '../../components/ui/CustomSelect';
 import { DataTable, Column, ActionButton } from '../../components/ui/DataTable';
-import { IconEdit, IconTrash, IconEye, IconCheck, IconX, IconBuilding } from '@tabler/icons-react';
+import { IconEdit, IconTrash, IconEye, IconCheck, IconX } from '@tabler/icons-react';
+import {
+  getFloorsApi,
+  getFloorByIdApi,
+  addFloorApi,
+  updateFloorApi,
+  deleteFloorApi,
+  batchCreateFloorsApi,
+  Floor,
+  GetFloorsParams,
+  AddFloorPayload,
+  UpdateFloorPayload,
+} from '../../apis/floor';
+import { getBlocksApi, Block } from '../../apis/block';
+import { getUnitsApi } from '../../apis/unit';
+import { showMessage } from '../../utils/Constant';
 
 type FloorsFormData = Yup.InferType<typeof floorsSchema>;
 
-interface Floor {
-  id: string;
-  floorNumber: number;
-  floorName: string;
+interface FloorWithUnits extends Floor {
   blockName: string;
-  status: string;
   totalUnits: number;
-  description?: string;
 }
 
 const statusOptions = [
-  { value: 'Active', label: 'Active' },
-  { value: 'Inactive', label: 'Inactive' },
-  { value: 'Under Construction', label: 'Under Construction' },
-];
-
-// Mock blocks data - replace with actual API call
-const blockOptions = [
-  { value: 'block1', label: 'Block A' },
-  { value: 'block2', label: 'Block B' },
-  { value: 'block3', label: 'Block C' },
-];
-
-// Mock floors data - replace with actual API call
-const mockFloors: Floor[] = [
-  {
-    id: '1',
-    floorNumber: 0,
-    floorName: 'Ground Floor',
-    blockName: 'Block A',
-    status: 'Active',
-    totalUnits: 10,
-    description: 'Ground floor with parking',
-  },
-  {
-    id: '2',
-    floorNumber: 1,
-    floorName: 'First Floor',
-    blockName: 'Block A',
-    status: 'Active',
-    totalUnits: 8,
-    description: 'First floor residential units',
-  },
-  {
-    id: '3',
-    floorNumber: 2,
-    floorName: 'Second Floor',
-    blockName: 'Block B',
-    status: 'Active',
-    totalUnits: 12,
-    description: 'Second floor units',
-  },
-  {
-    id: '4',
-    floorNumber: 3,
-    floorName: 'Third Floor',
-    blockName: 'Block B',
-    status: 'Under Construction',
-    totalUnits: 0,
-    description: 'Under construction',
-  },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
 ];
 
 export const FloorsPage = () => {
-  const [floors, setFloors] = useState<Floor[]>(mockFloors);
+  const [floors, setFloors] = useState<FloorWithUnits[]>([]);
+  const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showAddMultipleForm, setShowAddMultipleForm] = useState(false);
   const [editingFloor, setEditingFloor] = useState<Floor | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [limit] = useState(20);
+  const [submitting, setSubmitting] = useState(false);
+  const [blockOptions, setBlockOptions] = useState<{ value: string; label: string }[]>([]);
+  const [loadingBlocks, setLoadingBlocks] = useState(false);
+  const [unitsCountMap, setUnitsCountMap] = useState<Record<string, number>>({});
 
   useEffect(() => {
     document.title = 'Floors - Smart Society';
+    fetchBlocks();
+    fetchFloors();
+    fetchUnitsCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (searchTerm === '') {
+      fetchFloors();
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      fetchFloors();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
+
+  useEffect(() => {
+    fetchFloors();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, selectedFilters]);
+
+  const fetchBlocks = async () => {
+    try {
+      setLoadingBlocks(true);
+      const response = await getBlocksApi({ limit: 1000, status: 'active' });
+      const blocks = (response.items || []).map((block: Block) => ({
+        value: block._id,
+        label: block.name || 'Unnamed Block',
+      }));
+      setBlockOptions(blocks);
+    } catch (error: any) {
+      console.error('Error fetching blocks:', error);
+      showMessage('Failed to fetch blocks', 'error');
+      setBlockOptions([]);
+    } finally {
+      setLoadingBlocks(false);
+    }
+  };
+
+  const fetchUnitsCount = async () => {
+    try {
+      // Fetch all units to count them per floor
+      const response = await getUnitsApi({ limit: 10000 });
+      const units = response.items || [];
+      const countMap: Record<string, number> = {};
+      
+      units.forEach((unit) => {
+        const floorId = typeof unit.floor === 'string' ? unit.floor : unit.floor?._id;
+        if (floorId) {
+          countMap[floorId] = (countMap[floorId] || 0) + 1;
+        }
+      });
+      
+      setUnitsCountMap(countMap);
+    } catch (error: any) {
+      console.error('Error fetching units count:', error);
+      // Don't show error to user, just continue without unit counts
+    }
+  };
+
+  const fetchFloors = async () => {
+    try {
+      setLoading(true);
+      const params: GetFloorsParams = {
+        page,
+        limit,
+        q: searchTerm || undefined,
+        block: selectedFilters.blockName || undefined,
+        status: selectedFilters.status || undefined,
+      };
+
+      const response = await getFloorsApi(params);
+      const floorsWithUnits: FloorWithUnits[] = (response.items || []).map((floor: Floor) => {
+        const blockName = typeof floor.block === 'object' && floor.block ? floor.block.name : '';
+        const totalUnits = unitsCountMap[floor._id] || 0;
+        return {
+          ...floor,
+          blockName,
+          totalUnits,
+        };
+      });
+      
+      setFloors(floorsWithUnits);
+      setTotal(response.total || 0);
+    } catch (error: any) {
+      console.error('Error fetching floors:', error);
+      showMessage('Failed to fetch floors', 'error');
+      setFloors([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const {
     register,
@@ -96,108 +160,157 @@ export const FloorsPage = () => {
     defaultValues: {
       floorNumber: 0,
       floorName: '',
-      description: '',
-      totalUnits: 0,
       blockId: '',
-      status: '',
+      status: 'active',
     },
   });
 
-  const onSubmit = (data: FloorsFormData) => {
-    console.log('Form submitted:', data);
-    if (editingFloor) {
-      // Update existing floor
-      setFloors(
-        floors.map((floor) =>
-          floor.id === editingFloor.id
-            ? {
-                ...floor,
-                floorNumber: data.floorNumber,
-                floorName: data.floorName,
-                blockName: blockOptions.find((b) => b.value === data.blockId)?.label || '',
-                status: data.status,
-                totalUnits: data.totalUnits,
-                description: data.description,
-              }
-            : floor
-        )
-      );
+  const onSubmit = async (data: FloorsFormData) => {
+    try {
+      setSubmitting(true);
+      
+      if (editingFloor) {
+        // Update existing floor
+        const updatePayload: UpdateFloorPayload = {
+          id: editingFloor._id,
+          name: data.floorName,
+          number: data.floorNumber,
+          block: data.blockId,
+          status: data.status,
+        };
+        await updateFloorApi(updatePayload);
+        showMessage('Floor updated successfully!', 'success');
+      } else {
+        // Add new floor
+        const addPayload: AddFloorPayload = {
+          name: data.floorName,
+          number: data.floorNumber,
+          block: data.blockId,
+          status: data.status || 'active',
+        };
+        await addFloorApi(addPayload);
+        showMessage('Floor added successfully!', 'success');
+      }
+      
+      reset();
+      setShowForm(false);
+      setShowAddMultipleForm(false);
       setEditingFloor(null);
-    } else {
-      // Add new floor
-      const newFloor: Floor = {
-        id: Date.now().toString(),
-        floorNumber: data.floorNumber,
-        floorName: data.floorName,
-        blockName: blockOptions.find((b) => b.value === data.blockId)?.label || '',
-        status: data.status,
-        totalUnits: data.totalUnits,
-        description: data.description,
+      fetchFloors();
+      fetchUnitsCount();
+    } catch (error: any) {
+      console.error('Error saving floor:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to save floor';
+      showMessage(errorMessage, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const onSubmitBatch = async (data: FloorsFormData) => {
+    try {
+      setSubmitting(true);
+      
+      // For batch create, we need additional fields: prefix, startNumber, endNumber
+      // This is a simplified version - you might want to add a separate form for batch create
+      const prefix = data.floorName || 'Floor';
+      const startNumber = data.floorNumber;
+      const endNumber = data.floorNumber; // For single floor, start and end are the same
+      
+      // For now, we'll create a single floor even in batch mode
+      // You can enhance this later with a proper batch form
+      const addPayload: AddFloorPayload = {
+        name: data.floorName,
+        number: data.floorNumber,
+        block: data.blockId,
+        status: data.status || 'active',
       };
-      setFloors([...floors, newFloor]);
-    }
-    reset();
-    setShowForm(false);
-    setShowAddMultipleForm(false);
-    alert(editingFloor ? 'Floor updated successfully!' : 'Floor added successfully!');
-  };
-
-  const handleEdit = (floor: Floor) => {
-    setEditingFloor(floor);
-    setValue('floorNumber', floor.floorNumber);
-    setValue('floorName', floor.floorName);
-    setValue('blockId', blockOptions.find((b) => b.label === floor.blockName)?.value || '');
-    setValue('status', floor.status);
-    setValue('totalUnits', floor.totalUnits);
-    setValue('description', floor.description || '');
-    setShowForm(true);
-  };
-
-  const handleDelete = (floor: Floor) => {
-    if (window.confirm(`Are you sure you want to delete ${floor.floorName}?`)) {
-      setFloors(floors.filter((f) => f.id !== floor.id));
-      alert('Floor deleted successfully!');
+      await addFloorApi(addPayload);
+      showMessage('Floor added successfully!', 'success');
+      
+      reset();
+      setShowForm(false);
+      setShowAddMultipleForm(false);
+      setEditingFloor(null);
+      fetchFloors();
+      fetchUnitsCount();
+    } catch (error: any) {
+      console.error('Error saving floor:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to save floor';
+      showMessage(errorMessage, 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleView = (floor: Floor) => {
-    alert(`Floor Details:\nName: ${floor.floorName}\nBlock: ${floor.blockName}\nStatus: ${floor.status}\nUnits: ${floor.totalUnits}`);
+  const handleEdit = async (floor: FloorWithUnits) => {
+    try {
+      const fullFloor = await getFloorByIdApi(floor._id);
+      setEditingFloor(fullFloor);
+      setValue('floorNumber', fullFloor.number);
+      setValue('floorName', fullFloor.name);
+      setValue('blockId', typeof fullFloor.block === 'string' ? fullFloor.block : fullFloor.block?._id || '');
+      setValue('status', fullFloor.status || 'active');
+      setShowForm(true);
+      setShowAddMultipleForm(false);
+    } catch (error: any) {
+      console.error('Error fetching floor details:', error);
+      showMessage('Failed to fetch floor details', 'error');
+    }
+  };
+
+  const handleDelete = async (floor: FloorWithUnits) => {
+    if (window.confirm(`Are you sure you want to delete ${floor.name}?`)) {
+      try {
+        await deleteFloorApi({ id: floor._id });
+        showMessage('Floor deleted successfully!', 'success');
+        fetchFloors();
+        fetchUnitsCount();
+      } catch (error: any) {
+        console.error('Error deleting floor:', error);
+        const errorMessage = error.response?.data?.message || error.message || 'Failed to delete floor';
+        showMessage(errorMessage, 'error');
+      }
+    }
+  };
+
+  const handleView = (floor: FloorWithUnits) => {
+    const statusDisplay = floor.status === 'active' ? 'Active' : 'Inactive';
+    alert(
+      `Floor Details:\n\nName: ${floor.name}\nFloor Number: ${floor.number}\nBlock: ${floor.blockName}\nStatus: ${statusDisplay}\nTotal Units: ${floor.totalUnits}`
+    );
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'Active':
+      case 'active':
         return <IconCheck className="w-4 h-4 text-green-600" />;
-      case 'Inactive':
+      case 'inactive':
         return <IconX className="w-4 h-4 text-gray-600" />;
-      case 'Under Construction':
-        return <IconBuilding className="w-4 h-4 text-yellow-600" />;
       default:
         return null;
     }
   };
 
-  const columns: Column<Floor>[] = [
-    { key: 'floorNumber', header: 'Floor No.', sortable: true },
+  const columns: Column<FloorWithUnits>[] = [
+    { key: 'number', header: 'Floor No.', sortable: true },
     { key: 'blockName', header: 'Block', sortable: true },
-    { key: 'floorName', header: 'Floor Name', sortable: true },
+    { key: 'name', header: 'Floor Name', sortable: true },
     {
       key: 'status',
       header: 'Status',
       sortable: true,
       render: (floor) => (
         <div className="flex items-center gap-2">
-          {getStatusIcon(floor.status)}
+          {getStatusIcon(floor.status || 'active')}
           <span
             className={`px-2 py-1 text-xs font-semibold rounded-full ${
-              floor.status === 'Active'
+              floor.status === 'active'
                 ? 'bg-green-100 text-green-800'
-                : floor.status === 'Under Construction'
-                ? 'bg-yellow-100 text-yellow-800'
                 : 'bg-gray-100 text-gray-800'
             }`}
           >
-            {floor.status}
+            {floor.status === 'active' ? 'Active' : 'Inactive'}
           </span>
         </div>
       ),
@@ -205,7 +318,7 @@ export const FloorsPage = () => {
     { key: 'totalUnits', header: 'Total Units', sortable: true },
   ];
 
-  const actions: ActionButton<Floor>[] = [
+  const actions: ActionButton<FloorWithUnits>[] = [
     {
       label: 'View',
       icon: <IconEye className="w-4 h-4" />,
@@ -226,40 +339,33 @@ export const FloorsPage = () => {
     },
   ];
 
-  // Filter floors by search term and filters
-  const filteredFloors = floors.filter((floor) => {
-    // Search filter
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch =
-        floor.floorName.toLowerCase().includes(searchLower) ||
-        floor.blockName.toLowerCase().includes(searchLower) ||
-        floor.status.toLowerCase().includes(searchLower) ||
-        floor.floorNumber.toString().includes(searchLower) ||
-        floor.totalUnits.toString().includes(searchLower);
-      
-      if (!matchesSearch) {
-        return false;
-      }
-    }
-
-    // Other filters
-    if (selectedFilters.blockName && floor.blockName !== selectedFilters.blockName) {
-      return false;
-    }
-    if (selectedFilters.status && floor.status !== selectedFilters.status) {
-      return false;
-    }
-
-    return true;
-  });
+  // Filter floors by search term and filters (client-side filtering is already handled by API)
+  const filteredFloors = floors;
 
   const handleFilterChange = (key: string, value: string) => {
-    setSelectedFilters((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    setSelectedFilters((prev) => {
+      const newFilters = {
+        ...prev,
+        [key]: value || undefined,
+      };
+      // Remove undefined values
+      Object.keys(newFilters).forEach((k) => {
+        if (newFilters[k] === undefined || newFilters[k] === '') {
+          delete newFilters[k];
+        }
+      });
+      return newFilters;
+    });
+    setPage(1); // Reset to first page when filter changes
   };
+
+  if (loading && floors.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#f9fafb] flex items-center justify-center">
+        <div className="text-lg text-gray-600">Loading floors...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f9fafb]">
@@ -267,12 +373,40 @@ export const FloorsPage = () => {
         {/* Page Header */}
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-3xl font-bold text-primary-black">Floors</h1>
-          <button
-            onClick={() => setShowAddMultipleForm(true)}
-            className="px-4 py-2 text-sm font-medium text-white bg-primary-black rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
-          >
-            Add Multiple Floors
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setShowForm(true);
+                setShowAddMultipleForm(false);
+                setEditingFloor(null);
+                reset({
+                  floorNumber: 0,
+                  floorName: '',
+                  blockId: '',
+                  status: 'active',
+                });
+              }}
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-black rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
+            >
+              Add Floor
+            </button>
+            <button
+              onClick={() => {
+                setShowAddMultipleForm(true);
+                setShowForm(false);
+                setEditingFloor(null);
+                reset({
+                  floorNumber: 0,
+                  floorName: '',
+                  blockId: '',
+                  status: 'active',
+                });
+              }}
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-black rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
+            >
+              Add Multiple Floors
+            </button>
+          </div>
         </div>
 
         {/* Data Table */}
@@ -318,12 +452,10 @@ export const FloorsPage = () => {
                       onChange={(value) => handleFilterChange('blockName', value)}
                       options={[
                         { value: '', label: 'All Blocks' },
-                        ...Array.from(new Set(floors.map((f) => f.blockName)))
-                          .sort()
-                          .map((option) => ({ value: option, label: option })),
+                        ...blockOptions,
                       ]}
                       placeholder="All Blocks"
-                      disabled={false}
+                      disabled={loadingBlocks}
                     />
                   </div>
                   <div className="flex-1">
@@ -334,9 +466,7 @@ export const FloorsPage = () => {
                       onChange={(value) => handleFilterChange('status', value)}
                       options={[
                         { value: '', label: 'All Status' },
-                        ...Array.from(new Set(floors.map((f) => f.status)))
-                          .sort()
-                          .map((option) => ({ value: option, label: option })),
+                        ...statusOptions,
                       ]}
                       placeholder="All Status"
                       disabled={false}
@@ -353,13 +483,42 @@ export const FloorsPage = () => {
               searchable={false}
               filterable={false}
               emptyMessage="No floors found"
+              loading={loading}
             />
+
+            {/* Pagination */}
+            {total > limit && (
+              <div className="mt-4 flex items-center justify-between">
+                <div className="text-sm text-gray-700">
+                  Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total} floors
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={page * limit >= total}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Add/Edit Form */}
         {(showForm || showAddMultipleForm) && (
-          <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-lg border border-gray-200 p-6 lg:p-8">
+          <form
+            onSubmit={handleSubmit(showAddMultipleForm ? onSubmitBatch : onSubmit)}
+            className="bg-white rounded-lg border border-gray-200 p-6 lg:p-8"
+          >
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-primary-black">
                 {editingFloor ? 'Edit Floor' : showAddMultipleForm ? 'Add Multiple Floors' : 'Add New Floor'}
@@ -433,7 +592,7 @@ export const FloorsPage = () => {
                     options={blockOptions}
                     placeholder="Select block"
                     error={errors.blockId?.message as string}
-                    disabled={false}
+                    disabled={loadingBlocks}
                     required
                   />
                 </div>
@@ -446,7 +605,7 @@ export const FloorsPage = () => {
                   <CustomSelect
                     id="status"
                     name="status"
-                    value={watch('status') || ''}
+                    value={watch('status') || 'active'}
                     onChange={(value) => setValue('status', value, { shouldValidate: true })}
                     options={statusOptions}
                     placeholder="Select status"
@@ -454,41 +613,6 @@ export const FloorsPage = () => {
                     disabled={false}
                     required
                   />
-                </div>
-
-                {/* Total Units */}
-                <div>
-                  <label htmlFor="totalUnits" className="block text-sm font-medium text-gray-700 mb-1">
-                    Total Units <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    id="totalUnits"
-                    {...register('totalUnits', { valueAsNumber: true })}
-                    min="0"
-                    className="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-gray-900 focus:ring-0 bg-transparent"
-                    placeholder="0"
-                  />
-                  {errors.totalUnits && (
-                    <p className="mt-1 text-sm text-red-500">{errors.totalUnits.message as string}</p>
-                  )}
-                </div>
-
-                {/* Description - Full width */}
-                <div className="md:col-span-2">
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                    Description
-                  </label>
-                  <textarea
-                    id="description"
-                    {...register('description')}
-                    rows={3}
-                    className="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-gray-900 focus:ring-0 bg-transparent resize-y"
-                    placeholder="Enter floor description (optional)"
-                  />
-                  {errors.description && (
-                    <p className="mt-1 text-sm text-red-500">{errors.description.message as string}</p>
-                  )}
                 </div>
               </div>
             </div>
@@ -501,24 +625,24 @@ export const FloorsPage = () => {
                   reset({
                     floorNumber: 0,
                     floorName: '',
-                    description: '',
-                    totalUnits: 0,
                     blockId: '',
-                    status: '',
+                    status: 'active',
                   });
                   setShowForm(false);
                   setShowAddMultipleForm(false);
                   setEditingFloor(null);
                 }}
                 className="px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                disabled={submitting}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-6 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
+                disabled={submitting}
+                className="px-6 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {editingFloor ? 'Update Floor' : 'Save Floor'}
+                {submitting ? 'Saving...' : editingFloor ? 'Update Floor' : 'Save Floor'}
               </button>
             </div>
           </form>

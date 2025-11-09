@@ -3,7 +3,7 @@ import { useState, useMemo } from 'react';
 export interface Column<T> {
   key: keyof T | string;
   header: string;
-  render?: (item: T) => React.ReactNode;
+  render?: (item: T, index?: number) => React.ReactNode;
   sortable?: boolean;
 }
 
@@ -235,7 +235,7 @@ export function DataTable<T extends Record<string, any>>({
                 <tr key={index} className="hover:bg-gray-50">
                   {columns.map((column) => (
                     <td key={String(column.key)} className={`${paddingClass} py-4 whitespace-nowrap text-sm text-primary-black`}>
-                      {column.render ? column.render(item) : item[column.key as keyof T]}
+                      {column.render ? column.render(item, index) : item[column.key as keyof T]}
                     </td>
                   ))}
                   {actions.length > 0 && (

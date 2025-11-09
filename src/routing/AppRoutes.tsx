@@ -12,6 +12,8 @@ import { UnitsPage } from '../pages/building-details/UnitsPage';
 import { NoticeBoardPage } from '../pages/building-details/NoticeBoardPage';
 import SocietyManagement from '../pages/society-management/SocietyManagement';
 import { MembersPage } from '../pages/users/MembersPage';
+import CommitteeMembersPage from '../pages/users/CommitteeMembersPage';
+import EmployeesPage from '../pages/employees/EmployeesPage';
 
 /* current user roles */
 const getUserRoles = (): string => {
@@ -87,6 +89,10 @@ export const AppRoutes = () => {
         
         {/* Users Routes */}
         <Route path="users/members" element={<MembersPage />} />
+        
+        {/* Employees Routes */}
+        <Route path="users/society-employee" element={<EmployeesPage />} />
+        <Route path="users/committee-member" element={<CommitteeMembersPage />} />
         
         {/* Legacy routes for backward compatibility - redirect to new paths */}
         <Route path="building-details" element={<Navigate to="/building-settings/building-details" replace />} />

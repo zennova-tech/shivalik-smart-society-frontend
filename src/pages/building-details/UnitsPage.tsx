@@ -5,112 +5,149 @@ import * as Yup from 'yup';
 import { unitsSchema } from '../../utils/validationSchemas/unitsSchema';
 import { CustomSelect } from '../../components/ui/CustomSelect';
 import { DataTable, Column, ActionButton } from '../../components/ui/DataTable';
-import { IconEdit, IconTrash, IconEye, IconCheck, IconX, IconBuilding } from '@tabler/icons-react';
+import { IconEdit, IconTrash, IconEye, IconCheck, IconX, IconAlertTriangle } from '@tabler/icons-react';
+import { getBlocksApi, Block } from '../../apis/block';
+import { getFloorsApi, Floor } from '../../apis/floor';
+import {
+  getUnitsApi,
+  getUnitByIdApi,
+  addUnitApi,
+  updateUnitApi,
+  deleteUnitApi,
+  Unit,
+  GetUnitsParams,
+  AddUnitPayload,
+  UpdateUnitPayload,
+} from '../../apis/unit';
+import { showMessage } from '../../utils/Constant';
 
 type UnitsFormData = Yup.InferType<typeof unitsSchema>;
 
-interface Unit {
-  id: string;
-  unitNumber: string;
-  blockNumber: string;
-  floorNumber: string;
-  type: string;
-  area: number;
-  status: string;
-}
-
 const statusOptions = [
-  { value: 'Active', label: 'Active' },
-  { value: 'Inactive', label: 'Inactive' },
-  { value: 'Under Construction', label: 'Under Construction' },
-  { value: 'Sold', label: 'Sold' },
-  { value: 'Rented', label: 'Rented' },
+  { value: 'vacant', label: 'Vacant' },
+  { value: 'occupied', label: 'Occupied' },
+  { value: 'blocked', label: 'Blocked' },
+  { value: 'maintenance', label: 'Maintenance' },
 ];
 
 const unitTypeOptions = [
-  { value: '1 BHK', label: '1 BHK' },
-  { value: '2 BHK', label: '2 BHK' },
-  { value: '3 BHK', label: '3 BHK' },
-  { value: '4 BHK', label: '4 BHK' },
+  { value: '1BHK', label: '1 BHK' },
+  { value: '2BHK', label: '2 BHK' },
+  { value: '3BHK', label: '3 BHK' },
+  { value: '4BHK', label: '4 BHK' },
   { value: 'Penthouse', label: 'Penthouse' },
+  { value: 'Villa', label: 'Villa' },
   { value: 'Shop', label: 'Shop' },
   { value: 'Office', label: 'Office' },
 ];
 
-// Mock blocks data - replace with actual API call
-const blockOptions = [
-  { value: 'block1', label: 'Block A' },
-  { value: 'block2', label: 'Block B' },
-  { value: 'block3', label: 'Block C' },
-];
-
-// Mock floors data - replace with actual API call
-const floorOptions = [
-  { value: 'floor1', label: 'Ground Floor' },
-  { value: 'floor2', label: 'First Floor' },
-  { value: 'floor3', label: 'Second Floor' },
-  { value: 'floor4', label: 'Third Floor' },
-];
-
-// Mock units data - replace with actual API call
-const mockUnits: Unit[] = [
-  {
-    id: '1',
-    unitNumber: '101',
-    blockNumber: 'Block A',
-    floorNumber: 'Ground Floor',
-    type: '2 BHK',
-    area: 1200,
-    status: 'Active',
-  },
-  {
-    id: '2',
-    unitNumber: '102',
-    blockNumber: 'Block A',
-    floorNumber: 'Ground Floor',
-    type: '2 BHK',
-    area: 1200,
-    status: 'Active',
-  },
-  {
-    id: '3',
-    unitNumber: '201',
-    blockNumber: 'Block A',
-    floorNumber: 'First Floor',
-    type: '3 BHK',
-    area: 1500,
-    status: 'Rented',
-  },
-  {
-    id: '4',
-    unitNumber: '202',
-    blockNumber: 'Block B',
-    floorNumber: 'First Floor',
-    type: '1 BHK',
-    area: 800,
-    status: 'Sold',
-  },
-  {
-    id: '5',
-    unitNumber: '301',
-    blockNumber: 'Block B',
-    floorNumber: 'Second Floor',
-    type: '4 BHK',
-    area: 2000,
-    status: 'Under Construction',
-  },
-];
-
 export const UnitsPage = () => {
-  const [units, setUnits] = useState<Unit[]>(mockUnits);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [blockOptions, setBlockOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [floorOptions, setFloorOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingBlocks, setLoadingBlocks] = useState(false);
+  const [loadingFloors, setLoadingFloors] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [limit] = useState(20);
+  const [submitting, setSubmitting] = useState(false);
+  const [selectedBlockId, setSelectedBlockId] = useState<string>('');
 
   useEffect(() => {
     document.title = 'Units - Smart Society';
+    fetchBlocks();
   }, []);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchTerm === '') {
+        fetchUnits();
+        return;
+      }
+      fetchUnits();
+    }, searchTerm ? 500 : 0);
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
+
+  useEffect(() => {
+    fetchUnits();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, selectedFilters]);
+
+  useEffect(() => {
+    if (selectedBlockId) {
+      fetchFloors(selectedBlockId);
+    } else {
+      setFloorOptions([]);
+    }
+  }, [selectedBlockId]);
+
+  const fetchBlocks = async () => {
+    try {
+      setLoadingBlocks(true);
+      const response = await getBlocksApi({ limit: 1000, status: 'active' });
+      const blocks = (response.items || []).map((block: Block) => ({
+        value: block._id,
+        label: block.name || 'Unnamed Block',
+      }));
+      setBlockOptions(blocks);
+    } catch (error: any) {
+      console.error('Error fetching blocks:', error);
+      showMessage('Failed to fetch blocks', 'error');
+      setBlockOptions([]);
+    } finally {
+      setLoadingBlocks(false);
+    }
+  };
+
+  const fetchFloors = async (blockId: string) => {
+    try {
+      setLoadingFloors(true);
+      const response = await getFloorsApi({ limit: 1000, block: blockId, status: 'active' });
+      const floors = (response.items || []).map((floor: Floor) => ({
+        value: floor._id,
+        label: floor.name || `Floor ${floor.number || ''}`,
+      }));
+      setFloorOptions(floors);
+    } catch (error: any) {
+      console.error('Error fetching floors:', error);
+      showMessage('Failed to fetch floors', 'error');
+      setFloorOptions([]);
+    } finally {
+      setLoadingFloors(false);
+    }
+  };
+
+  const fetchUnits = async () => {
+    try {
+      setLoading(true);
+      const params: GetUnitsParams = {
+        page,
+        limit,
+        q: searchTerm || undefined,
+        block: selectedFilters.block || undefined,
+        floor: selectedFilters.floor || undefined,
+        status: selectedFilters.status || undefined,
+      };
+
+      const response = await getUnitsApi(params);
+      setUnits(response.items || []);
+      setTotal(response.total || 0);
+    } catch (error: any) {
+      console.error('Error fetching units:', error);
+      showMessage('Failed to fetch units', 'error');
+      setUnits([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const {
     register,
@@ -125,129 +162,214 @@ export const UnitsPage = () => {
       unitNumber: '',
       blockId: '',
       floorId: '',
-      type: '',
-      area: 0,
-      status: '',
+      unitType: '',
+      areaSqFt: undefined,
+      status: 'vacant',
     },
   });
 
-  const onSubmit = (data: UnitsFormData) => {
-    console.log('Form submitted:', data);
-    if (editingUnit) {
-      // Update existing unit
-      setUnits(
-        units.map((unit) =>
-          unit.id === editingUnit.id
-            ? {
-                ...unit,
-                unitNumber: data.unitNumber,
-                blockNumber: blockOptions.find((b) => b.value === data.blockId)?.label || '',
-                floorNumber: floorOptions.find((f) => f.value === data.floorId)?.label || '',
-                type: data.type,
-                area: data.area,
-                status: data.status,
-              }
-            : unit
-        )
-      );
-      setEditingUnit(null);
+  const watchedBlockId = watch('blockId');
+
+  useEffect(() => {
+    if (watchedBlockId) {
+      setSelectedBlockId(watchedBlockId);
+      setValue('floorId', ''); // Reset floor when block changes
     } else {
-      // Add new unit
-      const newUnit: Unit = {
-        id: Date.now().toString(),
-        unitNumber: data.unitNumber,
-        blockNumber: blockOptions.find((b) => b.value === data.blockId)?.label || '',
-        floorNumber: floorOptions.find((f) => f.value === data.floorId)?.label || '',
-        type: data.type,
-        area: data.area,
-        status: data.status,
-      };
-      setUnits([...units, newUnit]);
+      setSelectedBlockId('');
+      setFloorOptions([]);
     }
-    reset();
-    setShowForm(false);
-    alert(editingUnit ? 'Unit updated successfully!' : 'Unit added successfully!');
+  }, [watchedBlockId, setValue]);
+
+  const onSubmit = async (data: UnitsFormData) => {
+    try {
+      setSubmitting(true);
+
+      if (editingUnit) {
+        // Update existing unit
+        const updatePayload: UpdateUnitPayload = {
+          id: editingUnit._id,
+          block: data.blockId,
+          floor: data.floorId,
+          unitNumber: data.unitNumber,
+          unitType: data.unitType || undefined,
+          areaSqFt: data.areaSqFt || undefined,
+          status: data.status,
+        };
+        await updateUnitApi(updatePayload);
+        showMessage('Unit updated successfully!', 'success');
+      } else {
+        // Add new unit
+        const addPayload: AddUnitPayload = {
+          block: data.blockId,
+          floor: data.floorId,
+          unitNumber: data.unitNumber,
+          unitType: data.unitType || undefined,
+          areaSqFt: data.areaSqFt || undefined,
+          status: data.status,
+        };
+        await addUnitApi(addPayload);
+        showMessage('Unit added successfully!', 'success');
+      }
+
+      reset();
+      setShowForm(false);
+      setEditingUnit(null);
+      setSelectedBlockId('');
+      fetchUnits();
+    } catch (error: any) {
+      console.error('Error saving unit:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to save unit';
+      showMessage(errorMessage, 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleEdit = (unit: Unit) => {
-    setEditingUnit(unit);
-    setValue('unitNumber', unit.unitNumber);
-    setValue('blockId', blockOptions.find((b) => b.label === unit.blockNumber)?.value || '');
-    setValue('floorId', floorOptions.find((f) => f.label === unit.floorNumber)?.value || '');
-    setValue('type', unit.type);
-    setValue('area', unit.area);
-    setValue('status', unit.status);
-    setShowForm(true);
+  const handleEdit = async (unit: Unit) => {
+    try {
+      const fullUnit = await getUnitByIdApi(unit._id);
+      setEditingUnit(fullUnit);
+      setValue('unitNumber', fullUnit.unitNumber);
+      setValue('blockId', typeof fullUnit.block === 'string' ? fullUnit.block : fullUnit.block?._id || '');
+      setValue('floorId', typeof fullUnit.floor === 'string' ? fullUnit.floor : fullUnit.floor?._id || '');
+      setValue('unitType', fullUnit.unitType || '');
+      setValue('areaSqFt', fullUnit.areaSqFt || undefined);
+      setValue('status', fullUnit.status || 'vacant');
+      
+      // Set selected block to fetch floors
+      const blockId = typeof fullUnit.block === 'string' ? fullUnit.block : fullUnit.block?._id || '';
+      if (blockId) {
+        setSelectedBlockId(blockId);
+        await fetchFloors(blockId);
+      }
+      
+      setShowForm(true);
+    } catch (error: any) {
+      console.error('Error fetching unit details:', error);
+      showMessage('Failed to fetch unit details', 'error');
+    }
   };
 
-  const handleDelete = (unit: Unit) => {
+  const handleDelete = async (unit: Unit) => {
     if (window.confirm(`Are you sure you want to delete Unit ${unit.unitNumber}?`)) {
-      setUnits(units.filter((u) => u.id !== unit.id));
-      alert('Unit deleted successfully!');
+      try {
+        await deleteUnitApi({ id: unit._id });
+        showMessage('Unit deleted successfully!', 'success');
+        fetchUnits();
+      } catch (error: any) {
+        console.error('Error deleting unit:', error);
+        const errorMessage = error.response?.data?.message || error.message || 'Failed to delete unit';
+        showMessage(errorMessage, 'error');
+      }
     }
   };
 
   const handleView = (unit: Unit) => {
-    alert(`Unit Details:\nUnit Number: ${unit.unitNumber}\nBlock: ${unit.blockNumber}\nFloor: ${unit.floorNumber}\nType: ${unit.type}\nArea: ${unit.area} sq. ft.\nStatus: ${unit.status}`);
+    const blockName = typeof unit.block === 'object' && unit.block?.name ? unit.block.name : 'N/A';
+    const floorName = typeof unit.floor === 'object' && unit.floor?.name ? unit.floor.name : 'N/A';
+    const statusDisplay = unit.status?.charAt(0).toUpperCase() + unit.status?.slice(1) || 'N/A';
+    
+    alert(
+      `Unit Details:\n\nUnit Number: ${unit.unitNumber}\nBlock: ${blockName}\nFloor: ${floorName}\nType: ${unit.unitType || 'N/A'}\nArea: ${unit.areaSqFt || 'N/A'} sq. ft.\nStatus: ${statusDisplay}`
+    );
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'Active':
+      case 'vacant':
         return <IconCheck className="w-4 h-4 text-green-600" />;
-      case 'Inactive':
-        return <IconX className="w-4 h-4 text-gray-600" />;
-      case 'Under Construction':
-        return <IconBuilding className="w-4 h-4 text-yellow-600" />;
-      case 'Sold':
-        return <IconCheck className="w-4 h-4 text-blue-600" />;
-      case 'Rented':
-        return <IconCheck className="w-4 h-4 text-purple-600" />;
+      case 'occupied':
+        return <IconX className="w-4 h-4 text-blue-600" />;
+      case 'blocked':
+        return <IconX className="w-4 h-4 text-red-600" />;
+      case 'maintenance':
+        return <IconAlertTriangle className="w-4 h-4 text-yellow-600" />;
       default:
         return null;
     }
   };
 
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'Active':
-        return 'bg-green-100 text-green-800';
-      case 'Inactive':
-        return 'bg-gray-100 text-gray-800';
-      case 'Under Construction':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'Sold':
-        return 'bg-blue-100 text-blue-800';
-      case 'Rented':
-        return 'bg-purple-100 text-purple-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
+  const getStatusBadge = (status: string) => {
+    const statusDisplay = status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Vacant';
+    const statusClasses: Record<string, string> = {
+      vacant: 'bg-green-100 text-green-800',
+      occupied: 'bg-blue-100 text-blue-800',
+      blocked: 'bg-red-100 text-red-800',
+      maintenance: 'bg-yellow-100 text-yellow-800',
+    };
+
+    return (
+      <div className="flex items-center gap-2">
+        {getStatusIcon(status || 'vacant')}
+        <span
+          className={`px-2 py-1 text-xs font-semibold rounded-full ${
+            statusClasses[status || 'vacant'] || 'bg-gray-100 text-gray-800'
+          }`}
+        >
+          {statusDisplay}
+        </span>
+      </div>
+    );
   };
 
   const columns: Column<Unit>[] = [
-    { key: 'unitNumber', header: 'Unit No.', sortable: true },
-    { key: 'blockNumber', header: 'Block No.', sortable: true },
-    { key: 'floorNumber', header: 'Floor No.', sortable: true },
-    { key: 'type', header: 'Type', sortable: true },
     {
-      key: 'area',
+      key: 'number',
+      header: '#',
+      sortable: false,
+      render: (unit: Unit, index?: number) => (
+        <div className="text-sm text-gray-600 font-medium">
+          {index !== undefined ? (page - 1) * limit + index + 1 : '-'}
+        </div>
+      ),
+    },
+    {
+      key: 'unitNumber',
+      header: 'Unit No.',
+      sortable: true,
+      render: (unit: Unit) => <div className="font-medium text-primary-black">{unit.unitNumber}</div>,
+    },
+    {
+      key: 'block',
+      header: 'Block',
+      sortable: false,
+      render: (unit: Unit) => (
+        <div className="text-sm text-primary-black">
+          {typeof unit.block === 'object' && unit.block?.name ? unit.block.name : '-'}
+        </div>
+      ),
+    },
+    {
+      key: 'floor',
+      header: 'Floor',
+      sortable: false,
+      render: (unit: Unit) => (
+        <div className="text-sm text-primary-black">
+          {typeof unit.floor === 'object' && unit.floor?.name ? unit.floor.name : '-'}
+        </div>
+      ),
+    },
+    {
+      key: 'unitType',
+      header: 'Type',
+      sortable: true,
+      render: (unit: Unit) => (
+        <div className="text-sm text-primary-black">{unit.unitType || '-'}</div>
+      ),
+    },
+    {
+      key: 'areaSqFt',
       header: 'Area',
       sortable: true,
-      render: (unit) => `${unit.area} sq. ft.`,
+      render: (unit: Unit) => (
+        <div className="text-sm text-primary-black">{unit.areaSqFt ? `${unit.areaSqFt} sq. ft.` : '-'}</div>
+      ),
     },
     {
       key: 'status',
       header: 'Status',
       sortable: true,
-      render: (unit) => (
-        <div className="flex items-center gap-2">
-          {getStatusIcon(unit.status)}
-          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadgeColor(unit.status)}`}>
-            {unit.status}
-          </span>
-        </div>
-      ),
+      render: (unit: Unit) => getStatusBadge(unit.status || 'vacant'),
     },
   ];
 
@@ -272,48 +394,36 @@ export const UnitsPage = () => {
     },
   ];
 
-  // Filter units by search term and filters
-  const filteredUnits = units.filter((unit) => {
-    // Search filter
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch =
-        unit.unitNumber.toLowerCase().includes(searchLower) ||
-        unit.blockNumber.toLowerCase().includes(searchLower) ||
-        unit.floorNumber.toLowerCase().includes(searchLower) ||
-        unit.type.toLowerCase().includes(searchLower) ||
-        unit.status.toLowerCase().includes(searchLower) ||
-        unit.area.toString().includes(searchLower);
-      
-      if (!matchesSearch) {
-        return false;
-      }
-    }
-
-    // Other filters
-    if (selectedFilters.blockNumber && unit.blockNumber !== selectedFilters.blockNumber) {
-      return false;
-    }
-    if (selectedFilters.type && unit.type !== selectedFilters.type) {
-      return false;
-    }
-    if (selectedFilters.status && unit.status !== selectedFilters.status) {
-      return false;
-    }
-
-    return true;
-  });
+  // No client-side filtering needed as API handles it
+  const filteredUnits = units;
 
   const handleFilterChange = (key: string, value: string) => {
     setSelectedFilters((prev) => ({
       ...prev,
       [key]: value,
     }));
+    setPage(1);
   };
+
+  const handleSearch = (value: string) => {
+    setSearchTerm(value);
+    setPage(1);
+  };
+
+  // Get unique blocks and statuses for filters
+  const uniqueBlocks = Array.from(
+    new Set(
+      units
+        .map((u) => (typeof u.block === 'object' && u.block?.name ? u.block.name : null))
+        .filter((b): b is string => b !== null)
+    )
+  ).sort();
+
+  const uniqueStatuses = Array.from(new Set(units.map((u) => u.status).filter((s): s is string => !!s))).sort();
 
   return (
     <div className="min-h-screen bg-[#f9fafb]">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto p-6">
         {/* Page Header */}
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-3xl font-bold text-primary-black">Units</h1>
@@ -321,6 +431,8 @@ export const UnitsPage = () => {
             onClick={() => {
               reset();
               setEditingUnit(null);
+              setSelectedBlockId('');
+              setFloorOptions([]);
               setShowForm(true);
             }}
             className="px-4 py-2 text-sm font-medium text-white bg-primary-black rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
@@ -334,16 +446,15 @@ export const UnitsPage = () => {
           <div>
             {/* Search and Filter Section */}
             <div className="mb-6 space-y-4">
-              {/* Search bar and Filters row */}
               <div className="flex flex-col sm:flex-row gap-4">
                 {/* Search Bar */}
                 <div className="flex-1">
                   <div className="relative">
                     <input
                       type="text"
-                      placeholder="Search units by number, block, floor, type, or status..."
+                      placeholder="Search units by number..."
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onChange={(e) => handleSearch(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-md bg-primary-white text-primary-black focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 text-sm"
                     />
                     <svg
@@ -363,40 +474,8 @@ export const UnitsPage = () => {
                 </div>
 
                 {/* Dropdown Filters */}
-                <div className="flex gap-4 flex-1">
-                  <div className="flex-1">
-                    <CustomSelect
-                      id="filter-block"
-                      name="filter-block"
-                      value={selectedFilters.blockNumber || ''}
-                      onChange={(value) => handleFilterChange('blockNumber', value)}
-                      options={[
-                        { value: '', label: 'All Blocks' },
-                        ...Array.from(new Set(units.map((u) => u.blockNumber)))
-                          .sort()
-                          .map((option) => ({ value: option, label: option })),
-                      ]}
-                      placeholder="All Blocks"
-                      disabled={false}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <CustomSelect
-                      id="filter-type"
-                      name="filter-type"
-                      value={selectedFilters.type || ''}
-                      onChange={(value) => handleFilterChange('type', value)}
-                      options={[
-                        { value: '', label: 'All Types' },
-                        ...Array.from(new Set(units.map((u) => u.type)))
-                          .sort()
-                          .map((option) => ({ value: option, label: option })),
-                      ]}
-                      placeholder="All Types"
-                      disabled={false}
-                    />
-                  </div>
-                  <div className="flex-1">
+                <div className="flex gap-4">
+                  <div className="sm:w-48">
                     <CustomSelect
                       id="filter-status"
                       name="filter-status"
@@ -404,9 +483,7 @@ export const UnitsPage = () => {
                       onChange={(value) => handleFilterChange('status', value)}
                       options={[
                         { value: '', label: 'All Status' },
-                        ...Array.from(new Set(units.map((u) => u.status)))
-                          .sort()
-                          .map((option) => ({ value: option, label: option })),
+                        ...statusOptions,
                       ]}
                       placeholder="All Status"
                       disabled={false}
@@ -423,7 +500,34 @@ export const UnitsPage = () => {
               searchable={false}
               filterable={false}
               emptyMessage="No units found"
+              cellPadding="large"
+              loading={loading}
             />
+
+            {/* Pagination */}
+            {total > limit && (
+              <div className="mt-4 flex items-center justify-between">
+                <div className="text-sm text-gray-500">
+                  Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total} results
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={page * limit >= total}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -439,6 +543,8 @@ export const UnitsPage = () => {
                 onClick={() => {
                   setShowForm(false);
                   setEditingUnit(null);
+                  setSelectedBlockId('');
+                  setFloorOptions([]);
                   reset();
                 }}
                 className="text-gray-400 hover:text-gray-600"
@@ -481,10 +587,10 @@ export const UnitsPage = () => {
                     name="blockId"
                     value={watch('blockId') || ''}
                     onChange={(value) => setValue('blockId', value, { shouldValidate: true })}
-                    options={blockOptions}
-                    placeholder="Select block"
+                    options={[{ value: '', label: 'Select Block' }, ...blockOptions]}
+                    placeholder={loadingBlocks ? 'Loading blocks...' : 'Select block'}
                     error={errors.blockId?.message as string}
-                    disabled={false}
+                    disabled={loadingBlocks}
                     required
                   />
                 </div>
@@ -499,48 +605,50 @@ export const UnitsPage = () => {
                     name="floorId"
                     value={watch('floorId') || ''}
                     onChange={(value) => setValue('floorId', value, { shouldValidate: true })}
-                    options={floorOptions}
-                    placeholder="Select floor"
+                    options={[
+                      { value: '', label: selectedBlockId ? 'Select Floor' : 'Select Block First' },
+                      ...floorOptions,
+                    ]}
+                    placeholder={loadingFloors ? 'Loading floors...' : selectedBlockId ? 'Select floor' : 'Select Block First'}
                     error={errors.floorId?.message as string}
-                    disabled={false}
+                    disabled={!selectedBlockId || loadingFloors}
                     required
                   />
                 </div>
 
                 {/* Unit Type */}
                 <div>
-                  <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
-                    Unit Type <span className="text-red-500">*</span>
+                  <label htmlFor="unitType" className="block text-sm font-medium text-gray-700 mb-1">
+                    Unit Type
                   </label>
                   <CustomSelect
-                    id="type"
-                    name="type"
-                    value={watch('type') || ''}
-                    onChange={(value) => setValue('type', value, { shouldValidate: true })}
-                    options={unitTypeOptions}
+                    id="unitType"
+                    name="unitType"
+                    value={watch('unitType') || ''}
+                    onChange={(value) => setValue('unitType', value, { shouldValidate: true })}
+                    options={[{ value: '', label: 'Select Unit Type' }, ...unitTypeOptions]}
                     placeholder="Select unit type"
-                    error={errors.type?.message as string}
+                    error={errors.unitType?.message as string}
                     disabled={false}
-                    required
                   />
                 </div>
 
                 {/* Area */}
                 <div>
-                  <label htmlFor="area" className="block text-sm font-medium text-gray-700 mb-1">
-                    Area (sq. ft.) <span className="text-red-500">*</span>
+                  <label htmlFor="areaSqFt" className="block text-sm font-medium text-gray-700 mb-1">
+                    Area (sq. ft.)
                   </label>
                   <input
                     type="number"
-                    id="area"
-                    {...register('area', { valueAsNumber: true })}
+                    id="areaSqFt"
+                    {...register('areaSqFt', { valueAsNumber: true })}
                     min="0"
                     step="0.01"
                     className="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-gray-900 focus:ring-0 bg-transparent"
                     placeholder="Enter area in square feet"
                   />
-                  {errors.area && (
-                    <p className="mt-1 text-sm text-red-500">{errors.area.message as string}</p>
+                  {errors.areaSqFt && (
+                    <p className="mt-1 text-sm text-red-500">{errors.areaSqFt.message as string}</p>
                   )}
                 </div>
 
@@ -552,8 +660,8 @@ export const UnitsPage = () => {
                   <CustomSelect
                     id="status"
                     name="status"
-                    value={watch('status') || ''}
-                    onChange={(value) => setValue('status', value, { shouldValidate: true })}
+                    value={watch('status') || 'vacant'}
+                    onChange={(value) => setValue('status', value as any, { shouldValidate: true })}
                     options={statusOptions}
                     placeholder="Select status"
                     error={errors.status?.message as string}
@@ -573,12 +681,14 @@ export const UnitsPage = () => {
                     unitNumber: '',
                     blockId: '',
                     floorId: '',
-                    type: '',
-                    area: 0,
-                    status: '',
+                    unitType: '',
+                    areaSqFt: undefined,
+                    status: 'vacant',
                   });
                   setShowForm(false);
                   setEditingUnit(null);
+                  setSelectedBlockId('');
+                  setFloorOptions([]);
                 }}
                 className="px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
@@ -586,9 +696,10 @@ export const UnitsPage = () => {
               </button>
               <button
                 type="submit"
-                className="px-6 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
+                disabled={submitting}
+                className="px-6 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {editingUnit ? 'Update Unit' : 'Save Unit'}
+                {submitting ? 'Saving...' : editingUnit ? 'Update Unit' : 'Save Unit'}
               </button>
             </div>
           </form>
@@ -599,4 +710,3 @@ export const UnitsPage = () => {
 };
 
 export default UnitsPage;
-

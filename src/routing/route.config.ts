@@ -12,6 +12,8 @@ export const ROLE_ROUTES: Record<string, string[]> = {
     '/building-settings/blocks',
     '/building-settings/units',
     '/building-settings/notice-board',
+    '/employees',
+    '/users/members',
     // Legacy routes for backward compatibility
     '/building-details',
     '/floors',
@@ -26,6 +28,8 @@ export const ROLE_ROUTES: Record<string, string[]> = {
     '/building-settings/blocks',
     '/building-settings/units',
     '/building-settings/notice-board',
+    '/employees',
+    '/users/members',
     // Legacy routes for backward compatibility
     '/building-details',
     '/floors',
