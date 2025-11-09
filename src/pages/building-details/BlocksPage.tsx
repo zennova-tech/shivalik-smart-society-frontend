@@ -17,7 +17,7 @@ import {
   AddBlockPayload,
   UpdateBlockPayload,
 } from '../../apis/block';
-import { getBuildingApi } from '../../apis/building';
+import { getBuildingApi, normalizeBuildingResponse } from '../../apis/building';
 import { getSocietyId } from '../../utils/societyUtils';
 import { showMessage } from '../../utils/Constant';
 
@@ -78,17 +78,8 @@ export const BlocksPage = () => {
 
       const buildingResponse = await getBuildingApi(societyId);
       
-      // Handle both single building object and array response
-      let buildings: any[] = [];
-      if (buildingResponse && typeof buildingResponse === 'object') {
-        if (Array.isArray(buildingResponse.items)) {
-          buildings = buildingResponse.items;
-        } else if (buildingResponse._id) {
-          buildings = [buildingResponse];
-        } else if (Array.isArray(buildingResponse)) {
-          buildings = buildingResponse;
-        }
-      }
+      // Normalize building response to handle both 'item' (singular) and 'items' (plural) formats
+      const buildings = normalizeBuildingResponse(buildingResponse);
 
       // Get the first active building (or first building if no status filter)
       const activeBuilding = buildings.find((b: any) => b.status === 'active') || buildings[0];

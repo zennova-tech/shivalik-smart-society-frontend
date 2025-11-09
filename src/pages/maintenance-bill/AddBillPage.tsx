@@ -11,9 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { showMessage } from '@/utils/Constant';
 import { createBillApi } from '@/apis/bill';
-import { getBlocksApi, Block } from '@/apis/block';
+import { getBlocksBySocietyApi, Block } from '@/apis/block';
 import { getFloorsApi, Floor } from '@/apis/floor';
 import { getUnitsApi, Unit } from '@/apis/unit';
+import { getBuildingApi, normalizeBuildingResponse } from '@/apis/building';
+import { getSocietyId } from '@/utils/societyUtils';
 import { IconPlus, IconX } from '@tabler/icons-react';
 
 const billSchema = Yup.object().shape({
@@ -26,10 +28,9 @@ const billSchema = Yup.object().shape({
   block: Yup.string(),
   floor: Yup.string(),
   units: Yup.array().of(Yup.string()).min(1, 'At least one unit is required'),
-  amount: Yup.number().min(0),
-  amountForOwner: Yup.number().min(0),
-  amountForTenant: Yup.number().min(0),
+  amount: Yup.number().required('Amount is required').min(0, 'Amount must be greater than 0'),
   lateFee: Yup.number().min(0).default(0),
+  isForOwner: Yup.boolean().default(false),
   isPublished: Yup.boolean().default(false),
 });
 
@@ -44,6 +45,8 @@ export const AddBillPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [selectedBlockId, setSelectedBlockId] = useState<string>('');
   const [selectedFloorId, setSelectedFloorId] = useState<string>('');
+  const [defaultBuildingId, setDefaultBuildingId] = useState<string | null>(null);
+  const [loadingBuilding, setLoadingBuilding] = useState(false);
 
   const {
     register,
@@ -51,22 +54,24 @@ export const AddBillPage = () => {
     formState: { errors },
     setValue,
     watch,
+    reset,
   } = useForm<BillFormData>({
     resolver: yupResolver(billSchema),
     defaultValues: {
       isPublished: false,
+      isForOwner: false,
       lateFee: 0,
       forMonth: new Date().getMonth() + 1,
       year: new Date().getFullYear(),
     },
   });
 
-  const watchAmountForOwner = watch('amountForOwner');
-  const watchAmountForTenant = watch('amountForTenant');
   const watchAmount = watch('amount');
+  const watchIsForOwner = watch('isForOwner');
 
   useEffect(() => {
     document.title = 'Add Bill - Smart Society';
+    fetchDefaultBuilding();
     fetchBlocks();
   }, []);
 
@@ -91,10 +96,40 @@ export const AddBillPage = () => {
     }
   }, [selectedFloorId, selectedBlockId]);
 
+  const fetchDefaultBuilding = async () => {
+    try {
+      setLoadingBuilding(true);
+      const societyId = getSocietyId();
+      if (!societyId) {
+        showMessage('Society ID not found. Please select a society first.', 'error');
+        return;
+      }
+
+      const buildingResponse = await getBuildingApi(societyId);
+      
+      // Normalize building response to handle both 'item' (singular) and 'items' (plural) formats
+      const buildings = normalizeBuildingResponse(buildingResponse);
+
+      const activeBuilding = buildings.find((b: any) => b.status === 'active') || buildings[0];
+      
+      if (activeBuilding) {
+        const buildingId = activeBuilding._id || activeBuilding.id;
+        setDefaultBuildingId(buildingId);
+      } else {
+        showMessage('No building found for this society. Please create a building first.', 'error');
+      }
+    } catch (error: any) {
+      console.error('Error fetching building:', error);
+      showMessage('Failed to fetch building. Please ensure a building exists for this society.', 'error');
+    } finally {
+      setLoadingBuilding(false);
+    }
+  };
+
   const fetchBlocks = async () => {
     try {
       setLoading(true);
-      const response = await getBlocksApi({ limit: 500, status: 'active' });
+      const response = await getBlocksBySocietyApi({ limit: 500, status: 'active' });
       setBlocks(response.items || []);
     } catch (error: any) {
       console.error('Error fetching blocks:', error);
@@ -107,7 +142,7 @@ export const AddBillPage = () => {
   const fetchFloors = async (blockId: string) => {
     try {
       setLoading(true);
-      const response = await getFloorsApi({ block: blockId, limit: 500 });
+      const response = await getFloorsApi({ block: blockId, limit: 500, status: 'active' });
       setFloors(response.items || []);
     } catch (error: any) {
       console.error('Error fetching floors:', error);
@@ -192,31 +227,60 @@ export const AddBillPage = () => {
 
   const onSubmit = async (data: BillFormData) => {
     try {
+      if (!defaultBuildingId) {
+        showMessage('Building ID not found. Please ensure a building exists for this society.', 'error');
+        return;
+      }
+
+      if (!selectedUnits || selectedUnits.length === 0) {
+        showMessage('Please select at least one unit', 'error');
+        return;
+      }
+
       setSubmitting(true);
       const payload = {
-        ...data,
+        title: data.title,
+        description: data.description,
+        billDate: data.billDate ? new Date(data.billDate).toISOString() : new Date().toISOString(),
+        dueDate: data.dueDate ? new Date(data.dueDate).toISOString() : new Date().toISOString(),
+        forMonth: data.forMonth,
+        year: data.year,
         units: selectedUnits,
         block: selectedBlockId || undefined,
         floor: selectedFloorId || undefined,
+        building: defaultBuildingId,
+        amount: data.amount,
+        lateFee: data.lateFee || 0,
+        isForOwner: data.isForOwner || false,
+        isPublished: data.isPublished || false,
       };
 
       await createBillApi(payload);
       showMessage('Bill created successfully', 'success');
       
       // Reset form
+      reset({
+        title: '',
+        description: '',
+        billDate: undefined,
+        dueDate: undefined,
+        forMonth: new Date().getMonth() + 1,
+        year: new Date().getFullYear(),
+        amount: undefined,
+        lateFee: 0,
+        isForOwner: false,
+        isPublished: false,
+      });
       setSelectedUnits([]);
       setSelectedBlockId('');
       setSelectedFloorId('');
-      setValue('title', '');
-      setValue('description', '');
-      setValue('amount', undefined);
-      setValue('amountForOwner', undefined);
-      setValue('amountForTenant', undefined);
-      setValue('lateFee', 0);
-      setValue('isPublished', false);
+      setValue('block', undefined);
+      setValue('floor', undefined);
+      setValue('units', []);
     } catch (error: any) {
       console.error('Error creating bill:', error);
-      showMessage(error.message || 'Failed to create bill', 'error');
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to create bill';
+      showMessage(errorMessage, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -231,13 +295,13 @@ export const AddBillPage = () => {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Add Bill</h1>
-          <p className="text-muted-foreground mt-1">Create a new maintenance bill</p>
+          <h1 className="text-3xl font-bold text-primary-black">Add Maintenance Bill</h1>
+          <p className="text-muted-foreground mt-1">Create a new maintenance bill for units</p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)}>
-        <Card>
+        <Card className="bg-primary-white">
           <CardHeader>
             <CardTitle>Bill Details</CardTitle>
             <CardDescription>Enter the bill information</CardDescription>
@@ -301,7 +365,7 @@ export const AddBillPage = () => {
                     }
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-primary-white opacity-100">
                     <SelectValue placeholder="Select month (optional)" />
                   </SelectTrigger>
                   <SelectContent>
@@ -337,7 +401,7 @@ export const AddBillPage = () => {
               <Textarea
                 id="description"
                 {...register('description')}
-                placeholder="Enter bill description"
+                placeholder="Enter bill description (optional)"
                 rows={3}
               />
             </div>
@@ -346,7 +410,7 @@ export const AddBillPage = () => {
               <div className="space-y-2">
                 <Label htmlFor="block">Select Block</Label>
                 <Select value={selectedBlockId || undefined} onValueChange={handleBlockChange}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-primary-white opacity-100">
                     <SelectValue placeholder="Select block (optional)" />
                   </SelectTrigger>
                   <SelectContent>
@@ -366,7 +430,7 @@ export const AddBillPage = () => {
                   onValueChange={handleFloorChange}
                   disabled={!selectedBlockId}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-primary-white opacity-100">
                     <SelectValue placeholder="Select floor (optional)" />
                   </SelectTrigger>
                   <SelectContent>
@@ -430,17 +494,20 @@ export const AddBillPage = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="amount">Total Bill Amount</Label>
+                <Label htmlFor="amount">
+                  Bill Amount <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   id="amount"
                   type="number"
                   step="0.01"
                   {...register('amount', { valueAsNumber: true })}
-                  placeholder="Enter total amount"
+                  placeholder="Enter bill amount"
+                  className={errors.amount ? 'border-red-500' : ''}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Leave empty if using owner/tenant amounts
-                </p>
+                {errors.amount && (
+                  <p className="text-sm text-red-500">{errors.amount.message}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -457,32 +524,20 @@ export const AddBillPage = () => {
             </div>
 
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Bill for</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="amountForOwner">Amount for Owner</Label>
-                  <Input
-                    id="amountForOwner"
-                    type="number"
-                    step="0.01"
-                    {...register('amountForOwner', { valueAsNumber: true })}
-                    placeholder="Enter amount for owner"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="amountForTenant">Amount for Tenant</Label>
-                  <Input
-                    id="amountForTenant"
-                    type="number"
-                    step="0.01"
-                    {...register('amountForTenant', { valueAsNumber: true })}
-                    placeholder="Enter amount for tenant"
-                  />
-                </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="isForOwner"
+                  checked={watchIsForOwner}
+                  onCheckedChange={(checked) => setValue('isForOwner', checked === true)}
+                />
+                <Label htmlFor="isForOwner" className="cursor-pointer font-medium">
+                  This bill is for Owner
+                </Label>
               </div>
-              <p className="text-xs text-muted-foreground">
-                If owner/tenant amounts are specified, they will be used instead of total amount
+              <p className="text-xs text-muted-foreground ml-6">
+                {watchIsForOwner
+                  ? 'Bill will be assigned to the unit owner'
+                  : 'Bill will be assigned to the tenant (if tenant exists)'}
               </p>
             </div>
 
@@ -497,21 +552,49 @@ export const AddBillPage = () => {
               </Label>
             </div>
 
-            <div className="flex justify-end gap-4">
+            <div className="flex justify-end gap-4 pt-4 border-t">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => {
+                  reset({
+                    title: '',
+                    description: '',
+                    billDate: undefined,
+                    dueDate: undefined,
+                    forMonth: new Date().getMonth() + 1,
+                    year: new Date().getFullYear(),
+                    amount: undefined,
+                    lateFee: 0,
+                    isForOwner: false,
+                    isPublished: false,
+                  });
                   setSelectedUnits([]);
                   setSelectedBlockId('');
                   setSelectedFloorId('');
+                  setValue('block', undefined);
+                  setValue('floor', undefined);
+                  setValue('units', []);
                 }}
+                disabled={submitting}
               >
                 Reset
               </Button>
-              <Button type="submit" disabled={submitting}>
-                <IconPlus className="h-4 w-4 mr-2" />
-                {submitting ? 'Creating...' : 'Create Bill & Publish'}
+              <Button 
+                type="submit" 
+                disabled={submitting || !defaultBuildingId}
+                className="bg-primary-black hover:bg-gray-800 text-white"
+              >
+                {submitting ? (
+                  <>
+                    <span className="mr-2">Creating...</span>
+                  </>
+                ) : (
+                  <>
+                    <IconPlus className="h-4 w-4 mr-2" />
+                    Add Bill
+                  </>
+                )}
               </Button>
             </div>
           </CardContent>
@@ -520,4 +603,3 @@ export const AddBillPage = () => {
     </div>
   );
 };
-

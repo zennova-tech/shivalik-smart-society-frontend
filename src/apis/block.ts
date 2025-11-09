@@ -1,5 +1,5 @@
 import { apiRequest } from './apiRequest';
-import { getBuildingApi } from './building';
+import { getBuildingApi, normalizeBuildingResponse } from './building';
 import { getSocietyId } from '../utils/societyUtils';
 
 export interface Block {
@@ -106,21 +106,8 @@ export const getBlocksBySocietyApi = async (params?: Omit<GetBlocksParams, 'buil
     // Fetch buildings for the society
     const buildingResponse = await getBuildingApi(societyId);
     
-    // Handle both single building object and array response
-    // Backend returns { items: Building[], total, page, limit } for list endpoint
-    let buildings: any[] = [];
-    if (buildingResponse && typeof buildingResponse === 'object') {
-      if (Array.isArray(buildingResponse.items)) {
-        // Standard response format: { items: [...], total, page, limit }
-        buildings = buildingResponse.items;
-      } else if (buildingResponse._id) {
-        // Single building object (direct response)
-        buildings = [buildingResponse];
-      } else if (Array.isArray(buildingResponse)) {
-        // Direct array response (unlikely but handle it)
-        buildings = buildingResponse;
-      }
-    }
+    // Normalize building response to handle both 'item' (singular) and 'items' (plural) formats
+    const buildings = normalizeBuildingResponse(buildingResponse);
 
     // Debug loggin
     // If no buildings found, return empty response

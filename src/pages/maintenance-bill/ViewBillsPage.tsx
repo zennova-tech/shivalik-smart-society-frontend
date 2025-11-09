@@ -8,7 +8,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/badge';
 import { showMessage } from '@/utils/Constant';
 import { getBillsApi, publishBillApi, updateBillApi } from '@/apis/bill';
-import { getBlocksApi, Block } from '@/apis/block';
+import { getBlocksBySocietyApi, Block } from '@/apis/block';
 import { getFloorsApi, Floor } from '@/apis/floor';
 import { Bill, GetBillsParams } from '@/types/BillTypes';
 import { IconRefresh, IconEye, IconCheck, IconX } from '@tabler/icons-react';
@@ -51,7 +51,7 @@ export const ViewBillsPage = () => {
 
   const fetchBlocks = async () => {
     try {
-      const response = await getBlocksApi({ limit: 500, status: 'active' });
+      const response = await getBlocksBySocietyApi({ limit: 500, status: 'active' });
       setBlocks(response.items || []);
     } catch (error: any) {
       console.error('Error fetching blocks:', error);
@@ -61,7 +61,7 @@ export const ViewBillsPage = () => {
 
   const fetchFloors = async (blockId: string) => {
     try {
-      const response = await getFloorsApi({ block: blockId, limit: 500 });
+      const response = await getFloorsApi({ block: blockId, limit: 500, status: 'active' });
       setFloors(response.items || []);
     } catch (error: any) {
       console.error('Error fetching floors:', error);
@@ -163,7 +163,9 @@ export const ViewBillsPage = () => {
       header: 'Block',
       cell: ({ row }: any) => {
         const block = row.original.block;
-        return block ? block.name : '-';
+        if (!block) return '-';
+        if (typeof block === 'string') return block;
+        return block.name || '-';
       },
     },
     {
@@ -171,7 +173,9 @@ export const ViewBillsPage = () => {
       header: 'Floor',
       cell: ({ row }: any) => {
         const floor = row.original.floor;
-        return floor ? floor.name || `Floor ${floor.number}` : '-';
+        if (!floor) return '-';
+        if (typeof floor === 'string') return floor;
+        return floor.name || `Floor ${floor.number}` || '-';
       },
     },
     {
@@ -201,7 +205,30 @@ export const ViewBillsPage = () => {
     {
       accessorKey: 'amount',
       header: 'Amount',
-      cell: ({ row }: any) => `₹${row.original.amount.toLocaleString()}`,
+      cell: ({ row }: any) => {
+        const amount = row.original.amount || 0;
+        return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      },
+    },
+    {
+      accessorKey: 'lateFee',
+      header: 'Late Fee',
+      cell: ({ row }: any) => {
+        const lateFee = row.original.lateFee || 0;
+        return `₹${lateFee.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      },
+    },
+    {
+      accessorKey: 'isForOwner',
+      header: 'Bill For',
+      cell: ({ row }: any) => {
+        const isForOwner = row.original.isForOwner;
+        return (
+          <Badge variant={isForOwner ? 'default' : 'secondary'}>
+            {isForOwner ? 'Owner' : 'Tenant'}
+          </Badge>
+        );
+      },
     },
     {
       accessorKey: 'status',

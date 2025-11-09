@@ -17,7 +17,7 @@ import {
   AddParkingPayload,
   UpdateParkingPayload,
 } from '../../apis/parking';
-import { getBuildingApi } from '../../apis/building';
+import { getBuildingApi, normalizeBuildingResponse } from '../../apis/building';
 import { getSocietyId } from '../../utils/societyUtils';
 import { showMessage } from '../../utils/Constant';
 
@@ -97,16 +97,8 @@ export const ParkingPage = () => {
 
       const buildingResponse = await getBuildingApi(societyId);
       
-      let buildings: any[] = [];
-      if (buildingResponse && typeof buildingResponse === 'object') {
-        if (Array.isArray(buildingResponse.items)) {
-          buildings = buildingResponse.items;
-        } else if (buildingResponse._id) {
-          buildings = [buildingResponse];
-        } else if (Array.isArray(buildingResponse)) {
-          buildings = buildingResponse;
-        }
-      }
+      // Normalize building response to handle both 'item' (singular) and 'items' (plural) formats
+      const buildings = normalizeBuildingResponse(buildingResponse);
 
       const activeBuilding = buildings.find((b: any) => b.status === 'active') || buildings[0];
       

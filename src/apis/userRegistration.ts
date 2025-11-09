@@ -104,3 +104,65 @@ export const getBlockUnitsApi = async (societyId: string, blockId: string): Prom
   });
 };
 
+// Guest/User Request Interfaces
+export interface GuestUser {
+  unitId: string;
+  unitNumber: string;
+  unitType: string;
+  blockId: string;
+  blockName: string;
+  floor: {
+    id: string;
+    name: string;
+    number: number;
+  };
+  firstName: string;
+  lastName?: string;
+  mobileNumber: string;
+  countryCode: string;
+  email?: string;
+  userId: string;
+}
+
+export interface GetGuestsResponse {
+  status: boolean;
+  message: string;
+  data: {
+    items: GuestUser[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+export interface GetGuestsParams {
+  page?: number;
+  limit?: number;
+}
+
+// API function to get guest users (user requests)
+export const getGuestsApi = async (params?: GetGuestsParams): Promise<GetGuestsResponse> => {
+  return await apiRequest<GetGuestsResponse>({
+    method: 'GET',
+    url: 'user/register/guests',
+    params: params,
+  });
+};
+
+// API function to approve a guest user request
+export const approveGuestApi = async (userId: string): Promise<{ status: boolean; message: string; data?: any }> => {
+  return await apiRequest<{ status: boolean; message: string; data?: any }>({
+    method: 'POST',
+    url: `user/register/guests/${userId}/approve`, // Update if endpoint is different
+  });
+};
+
+// API function to decline a guest user request
+export const declineGuestApi = async (userId: string): Promise<{ status: boolean; message: string; data?: any }> => {
+  return await apiRequest<{ status: boolean; message: string; data?: any }>({
+    method: 'POST',
+    url: `user/register/guests/${userId}/decline`, // Update if endpoint is different
+  });
+};
+

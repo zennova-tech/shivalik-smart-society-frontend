@@ -1,6 +1,11 @@
 export interface Bill {
   _id: string;
   society: string;
+  building?: string | {
+    _id: string;
+    buildingName?: string;
+    name?: string;
+  };
   unit?: {
     _id: string;
     unitNumber: string;
@@ -12,11 +17,11 @@ export interface Bill {
     lastName?: string;
     email?: string;
   };
-  block?: {
+  block?: string | {
     _id: string;
     name: string;
   };
-  floor?: {
+  floor?: string | {
     _id: string;
     name: string;
     number: number;
@@ -26,13 +31,12 @@ export interface Bill {
   billDate: string;
   dueDate: string;
   forMonth?: number;
-  year: number;
+  year?: number;
   amount: number;
-  amountForOwner: number;
-  amountForTenant: number;
-  lateFee: number;
+  lateFee?: number;
+  isForOwner?: boolean;
   status: "pending" | "paid" | "due" | "cancelled";
-  isPublished: boolean;
+  isPublished?: boolean;
   publishedAt?: string;
   paidDate?: string;
   paymentRef?: string;
@@ -54,13 +58,13 @@ export interface CreateBillPayload {
   dueDate: string;
   forMonth?: number;
   year: number;
+  building?: string;
   block?: string;
   floor?: string;
   units: string[];
-  amount?: number;
-  amountForOwner?: number;
-  amountForTenant?: number;
+  amount: number;
   lateFee?: number;
+  isForOwner?: boolean;
   isPublished?: boolean;
 }
 
@@ -83,9 +87,8 @@ export interface UpdateBillPayload {
   billDate?: string;
   dueDate?: string;
   amount?: number;
-  amountForOwner?: number;
-  amountForTenant?: number;
   lateFee?: number;
+  isForOwner?: boolean;
   status?: "pending" | "paid" | "due" | "cancelled";
   paidDate?: string;
   paymentRef?: string;

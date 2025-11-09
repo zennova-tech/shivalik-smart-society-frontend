@@ -42,6 +42,7 @@ export const ROLE_ROUTES: Record<string, string[]> = {
     '/maintenance-bill/view',
     '/users/society-employee',
     '/users/committee-member',
+    '/users/user-request',
     '/building-details',
     '/floors',
     '/blocks',
@@ -65,6 +66,7 @@ export const ROLE_ROUTES: Record<string, string[]> = {
     '/users/committee-members',
     '/maintenance-bill/add-bill',
     '/maintenance-bill/view',
+    '/users/user-request',
     '/building-details',
     '/floors',
     '/blocks',
@@ -113,6 +115,7 @@ const BASE_MENU_ITEMS: MenuItem[] = [
       { name: 'Members', href: '/users/members' },
       { name: 'Society Employee', href: '/users/society-employee' },
       { name: 'Committee Member', href: '/users/committee-member' },
+      { name: 'User Request', href: '/users/user-request' },
     ],
   },
   {

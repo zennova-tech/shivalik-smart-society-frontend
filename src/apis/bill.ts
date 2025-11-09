@@ -51,3 +51,10 @@ export const publishBillApi = async (id: string): Promise<Bill> => {
   return response.data;
 };
 
+export const deleteBillApi = async (id: string): Promise<void> => {
+  await apiRequest<void>({
+    method: 'DELETE',
+    url: `manager/bills/${id}`,
+  });
+};
+

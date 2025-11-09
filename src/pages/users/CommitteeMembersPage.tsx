@@ -19,7 +19,7 @@ import {
   getCommitteeMemberByIdApi,
 } from '@/apis/committeeMember';
 import { getBlocksBySocietyApi, Block } from '@/apis/block';
-import { getBuildingApi } from '@/apis/building';
+import { getBuildingApi, normalizeBuildingResponse } from '@/apis/building';
 import { getSocietyId } from '@/utils/societyUtils';
 import { showMessage } from '@/utils/Constant';
 
@@ -84,17 +84,8 @@ export const CommitteeMembersPage = () => {
 
       const buildingResponse = await getBuildingApi(societyId);
       
-      // Handle both single building object and array response
-      let buildings: any[] = [];
-      if (buildingResponse && typeof buildingResponse === 'object') {
-        if (Array.isArray(buildingResponse.items)) {
-          buildings = buildingResponse.items;
-        } else if (buildingResponse._id) {
-          buildings = [buildingResponse];
-        } else if (Array.isArray(buildingResponse)) {
-          buildings = buildingResponse;
-        }
-      }
+      // Normalize building response to handle both 'item' (singular) and 'items' (plural) formats
+      const buildings = normalizeBuildingResponse(buildingResponse);
 
       // Get the first active building (or first building if no status filter)
       const activeBuilding = buildings.find((b: any) => b.status === 'active') || buildings[0];
@@ -395,7 +386,7 @@ export const CommitteeMembersPage = () => {
 
   return (
     <div className="min-h-screen bg-[#f9fafb]">
-      <div className="max-w-7xl mx-auto p-6">
+      <div className="max-w-7xl mx-auto">
         {/* Page Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>

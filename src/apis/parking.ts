@@ -1,5 +1,5 @@
 import { apiRequest } from './apiRequest';
-import { getBuildingApi } from './building';
+import { getBuildingApi, normalizeBuildingResponse } from './building';
 import { getSocietyId } from '../utils/societyUtils';
 
 export interface Parking {
@@ -115,16 +115,8 @@ export const getParkingBySocietyApi = async (params?: Omit<GetParkingParams, 'bu
 
     const buildingResponse = await getBuildingApi(societyId);
     
-    let buildings: any[] = [];
-    if (buildingResponse && typeof buildingResponse === 'object') {
-      if (Array.isArray(buildingResponse.items)) {
-        buildings = buildingResponse.items;
-      } else if (buildingResponse._id) {
-        buildings = [buildingResponse];
-      } else if (Array.isArray(buildingResponse)) {
-        buildings = buildingResponse;
-      }
-    }
+    // Normalize building response to handle both 'item' (singular) and 'items' (plural) formats
+    const buildings = normalizeBuildingResponse(buildingResponse);
 
     if (buildings.length === 0) {
       return {
