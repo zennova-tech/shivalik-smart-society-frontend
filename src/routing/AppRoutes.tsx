@@ -11,6 +11,7 @@ import { BlocksPage } from '../pages/building-details/BlocksPage';
 import { UnitsPage } from '../pages/building-details/UnitsPage';
 import { NoticeBoardPage } from '../pages/building-details/NoticeBoardPage';
 import SocietyManagement from '../pages/society-management/SocietyManagement';
+import { MembersPage } from '../pages/users/MembersPage';
 
 /* current user roles */
 const getUserRoles = (): string => {
@@ -84,14 +85,15 @@ export const AppRoutes = () => {
         <Route path="building-settings/units" element={<UnitsPage />} />
         <Route path="building-settings/notice-board" element={<NoticeBoardPage />} />
         
+        {/* Users Routes */}
+        <Route path="users/members" element={<MembersPage />} />
+        
         {/* Legacy routes for backward compatibility - redirect to new paths */}
         <Route path="building-details" element={<Navigate to="/building-settings/building-details" replace />} />
         <Route path="floors" element={<Navigate to="/building-settings/floors" replace />} />
         <Route path="blocks" element={<Navigate to="/building-settings/blocks" replace />} />
         <Route path="units" element={<Navigate to="/building-settings/units" replace />} />
         <Route path="notice-board" element={<Navigate to="/building-settings/notice-board" replace />} />
-        
-        {/* <Route path="users" element={<PeoplePage />} /> */}
 
         {/* Catch-all inside private area (keeps the layout) */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
