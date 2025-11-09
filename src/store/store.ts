@@ -6,6 +6,7 @@ import otpSlice from './slices/otpSlice';
 import societySlice from './slices/societySlice';
 import buildingSlice from './slices/buildingSlice';
 import memberSlice from './slices/memberSlice';
+import registrationSlice from './slices/registrationSlice';
 import rootSaga from './sagas/rootSaga';
 
 const sagaMiddleware = createSagaMiddleware();
@@ -17,6 +18,7 @@ export const store = configureStore({
     society: societySlice,
     building: buildingSlice,
     member: memberSlice,
+    registration: registrationSlice,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

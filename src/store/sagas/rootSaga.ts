@@ -4,6 +4,7 @@ import otpSaga from './otpSaga';
 import societySaga from './societySaga';
 import buildingSaga from './buildingSaga';
 import memberSaga from './memberSaga';
+import registrationSaga from './registrationSaga';
 
 export default function* rootSaga() {
   yield all([
@@ -12,5 +13,6 @@ export default function* rootSaga() {
     societySaga(),
     buildingSaga(),
     memberSaga(),
+    registrationSaga(),
   ]);
 }

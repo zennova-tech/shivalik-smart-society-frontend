@@ -36,7 +36,10 @@ export const PublicRoute = ({ children }: PublicRouteProps) => {
 
   // Don't redirect if we're already on a public route and processing login
   const currentPath = location.pathname;
-  const isPublicRoute = currentPath === '/login' || currentPath === '/otp';
+  const isPublicRoute = 
+    currentPath === '/login' || 
+    currentPath === '/otp' ||
+    currentPath.startsWith('/user/register');
 
   if (effectiveAuth) {
     // Get user role to determine redirect destination
@@ -46,7 +49,8 @@ export const PublicRoute = ({ children }: PublicRouteProps) => {
 
     // Only redirect if we're on a public route (login/otp)
     // This prevents infinite redirect loops
-    if (isPublicRoute) {
+    // Don't redirect from registration pages - allow users to complete registration
+    if (isPublicRoute && !currentPath.startsWith('/user/register')) {
       // SuperAdmin always goes to society-management
       if (normalizedRole === "superadmin" || normalizedRole.includes("superadmin")) {
         return <Navigate to="/society-management" replace />;

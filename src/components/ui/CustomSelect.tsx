@@ -47,7 +47,9 @@ export const CustomSelect = ({
     };
   }, [isOpen]);
 
-  const selectedOption = options.find((opt) => opt.value === value);
+  // Normalize values to strings for comparison (handles ObjectId vs string mismatches)
+  const normalizedValue = value ? String(value).trim() : '';
+  const selectedOption = options.find((opt) => String(opt.value).trim() === normalizedValue);
 
   const handleSelect = (optionValue: string) => {
     onChange(optionValue);
@@ -105,10 +107,10 @@ export const CustomSelect = ({
               <li
                 key={option.value}
                 role="option"
-                aria-selected={value === option.value}
+                aria-selected={String(option.value).trim() === normalizedValue}
                 onClick={() => handleSelect(option.value)}
                 className={`px-3 py-2 text-sm text-primary-black cursor-pointer hover:bg-gray-100 transition-colors ${
-                  value === option.value ? 'bg-gray-100 font-medium' : ''
+                  String(option.value).trim() === normalizedValue ? 'bg-gray-100 font-medium' : ''
                 }`}
               >
                 {option.label}

@@ -4,8 +4,8 @@ export interface Floor {
   _id: string;
   name: string;
   number: number;
-  block?: string | { _id: string; name: string };
-  building?: string;
+  block?: string | { _id: string; name: string; [key: string]: any };
+  building?: string | { _id: string; id?: string; [key: string]: any };
   status?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -35,6 +35,7 @@ export interface AddFloorPayload {
   block: string;
   building?: string;
   status?: string;
+  societyId?: string; // Optional: backend can auto-get building from society
 }
 
 export interface UpdateFloorPayload {

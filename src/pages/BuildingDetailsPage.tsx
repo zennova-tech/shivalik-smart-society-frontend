@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import { useDispatch, useSelector } from 'react-redux';
@@ -12,12 +12,65 @@ import { getFromLocalStorage } from '../utils/localstorage';
 
 type BuildingDetailsFormData = Yup.InferType<typeof buildingDetailsSchema>;
 
+// Building API Response Interface
+interface BuildingApiResponse {
+  _id: string;
+  society: {
+    name: string;
+    ref: string;
+    logo?: string;
+  };
+  buildingName: string;
+  address: string;
+  city: string;
+  state: string;
+  pinCode: string;
+  totalBlocks: number;
+  totalUnits: number;
+  buildingType: string; // API returns lowercase: "residential", "commercial", etc.
+  status: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  __v?: number;
+}
+
+// Redux State Interface
+interface BuildingState {
+  building: {
+    item?: BuildingApiResponse;
+  } | BuildingApiResponse | null;
+  error: string | null;
+  status: 'idle' | 'loading' | 'complete' | 'failed';
+  fetchStatus: 'idle' | 'loading' | 'complete' | 'failed';
+  fetchError: string | null;
+}
+
 const buildingTypeOptions = [
   { value: 'Residential', label: 'Residential' },
   { value: 'Commercial', label: 'Commercial' },
   { value: 'Mixed', label: 'Mixed' },
   { value: 'Industrial', label: 'Industrial' },
 ];
+
+/**
+ * Normalizes building type from API format (lowercase) to form format (capitalized)
+ * @param buildingType - Building type from API (e.g., "residential")
+ * @returns Capitalized building type (e.g., "Residential") or empty string
+ */
+const normalizeBuildingType = (buildingType: string | undefined): string => {
+  if (!buildingType) return '';
+  
+  const normalized = buildingType.toLowerCase();
+  const validTypes = ['residential', 'commercial', 'mixed', 'industrial'];
+  
+  if (!validTypes.includes(normalized)) {
+    return '';
+  }
+  
+  // Capitalize first letter
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
 
 export const BuildingDetailsPage = () => {
   const dispatch = useDispatch();
@@ -27,19 +80,40 @@ export const BuildingDetailsPage = () => {
     status,
     fetchStatus,
     fetchError,
-  }: any = useSelector((state: any) => state.building);
+  } = useSelector((state: { building: BuildingState }) => state.building);
 
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [societyId, setSocietyId] = useState<string | null>(null);
 
-  // Helper function to get society ID
-  const getSocietyId = (): string | null => {
-    const userInfo = getFromLocalStorage<any>('userInfo');
-    const selectedSociety = getFromLocalStorage<any>('selectedSociety');
-    return userInfo?.societyId || userInfo?.society?.id || selectedSociety?.id || selectedSociety?._id || null;
-  };
+  useEffect(() => {
+    console.log("building", building);
+    
+  }, [building])
 
+  /**
+   * Helper function to get society ID from localStorage
+   * @returns Society ID string or null if not found
+   */
+  const getSocietyId = useCallback((): string | null => {
+    try {
+      const userInfo = getFromLocalStorage<{ societyId?: string; society?: { id?: string } }>('userInfo');
+      const selectedSociety = getFromLocalStorage<{ id?: string; _id?: string }>('selectedSociety');
+      
+      return (
+        userInfo?.societyId || 
+        userInfo?.society?.id || 
+        selectedSociety?.id || 
+        selectedSociety?._id || 
+        null
+      );
+    } catch (error) {
+      console.error('Error getting society ID from localStorage:', error);
+      return null;
+    }
+  }, []);
+
+  // Fetch building data on component mount
   useEffect(() => {
     document.title = 'Building Details - Smart Society';
     
@@ -52,7 +126,7 @@ export const BuildingDetailsPage = () => {
     } else {
       showMessage('Society ID not found. Please select a society first.', 'error');
     }
-  }, [dispatch]);
+  }, [dispatch, getSocietyId]);
 
   // Handle fetch success and error messages
   useEffect(() => {
@@ -99,26 +173,58 @@ export const BuildingDetailsPage = () => {
     },
   });
 
-  // Map fetched building data to form fields
+  /**
+   * Maps fetched building data from API response to form fields
+   * Handles data transformation and normalization
+   * Note: Building data is nested in building.item
+   */
   useEffect(() => {
     if (fetchStatus === 'complete' && building) {
-      // Map backend data to form fields
-      setValue('buildingName', building.buildingName || '');
-      setValue('societyName', building.society?.name || '');
-      setValue('address', building.address || '');
-      setValue('city', building.city || '');
-      setValue('state', building.state || '');
-      setValue('pincode', building.pinCode || building.pincode || '');
-      setValue('totalBlocks', building.totalBlocks || 0);
-      setValue('totalUnits', building.totalUnits || 0);
-      setValue('buildingType', building.buildingType || '');
-      
-      // Set logo preview if logo exists
-      if (building.society?.logo) {
-        setLogoPreview(building.society.logo);
+      try {
+        // Extract building data from building.item or use building directly if it's already the response
+        const buildingData = (building as { item?: BuildingApiResponse })?.item || (building as BuildingApiResponse);
+        
+        // Validate that we have valid building data
+        if (!buildingData || typeof buildingData !== 'object') {
+          console.warn('Invalid building data structure:', building);
+          dispatch(resetGetBuilding());
+          return;
+        }
+
+        console.log("buildingData", buildingData);
+        
+        // Map all fields from API response to form
+        setValue('buildingName', buildingData.buildingName?.trim() || '', { shouldValidate: false });
+        setValue('societyName', buildingData.society?.name?.trim() || '', { shouldValidate: false });
+        setValue('address', buildingData.address?.trim() || '', { shouldValidate: false });
+        setValue('city', buildingData.city?.trim() || '', { shouldValidate: false });
+        setValue('state', buildingData.state?.trim() || '', { shouldValidate: false });
+        
+        // Handle pinCode (API uses camelCase: pinCode)
+        const pinCode = buildingData.pinCode || (buildingData as any).pincode || '';
+        setValue('pincode', pinCode.toString().trim(), { shouldValidate: false });
+        
+        // Handle numeric fields with proper defaults
+        setValue('totalBlocks', Number(buildingData.totalBlocks) || 0, { shouldValidate: false });
+        setValue('totalUnits', Number(buildingData.totalUnits) || 0, { shouldValidate: false });
+        
+        // Normalize building type from API format (lowercase) to form format (capitalized)
+        const normalizedBuildingType = normalizeBuildingType(buildingData.buildingType);
+        setValue('buildingType', normalizedBuildingType, { shouldValidate: false });
+        
+        // Set logo preview if logo exists (can be URL or base64 string)
+        if (buildingData.society?.logo) {
+          setLogoPreview(buildingData.society.logo);
+        } else {
+          setLogoPreview(null);
+        }
+        
+        dispatch(resetGetBuilding());
+      } catch (error) {
+        console.error('Error mapping building data to form:', error);
+        showMessage('Error loading building details. Please refresh the page.', 'error');
+        dispatch(resetGetBuilding());
       }
-      
-      dispatch(resetGetBuilding());
     }
   }, [building, fetchStatus, setValue, dispatch]);
 
@@ -171,22 +277,31 @@ export const BuildingDetailsPage = () => {
     }
 
     // Map form data to API payload structure
+    // Convert buildingType from form format (capitalized) to API format (lowercase)
+    const buildingTypeForApi = data.buildingType?.toLowerCase() || '';
+    
     const payload: UpdateBuildingPayload = {
       societyId: currentSocietyId,
       society: {
-        name: data.societyName,
-        logo: logoBase64, // Send base64 string or undefined
+        name: data.societyName.trim(),
+        logo: logoBase64 || undefined, // Send base64 string or undefined
+        // Do not send ref - let backend handle it from societyId
       },
-      buildingName: data.buildingName,
-      address: data.address,
-      city: data.city,
-      state: data.state,
-      pinCode: data.pincode,
+      buildingName: data.buildingName.trim(),
+      address: data.address.trim(),
+      city: data.city.trim(),
+      state: data.state.trim(),
+      pinCode: data.pincode.trim(),
       totalBlocks: data.totalBlocks,
       totalUnits: data.totalUnits,
-      buildingType: data.buildingType,
+      buildingType: buildingTypeForApi,
       // territory and createdBy can be added if needed
     };
+    
+    // Ensure we don't accidentally send invalid ref
+    if (payload.society) {
+      delete (payload.society as any).ref;
+    }
 
     // Dispatch the update building action
     dispatch(updateBuilding(payload));

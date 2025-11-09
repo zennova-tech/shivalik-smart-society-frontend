@@ -18,7 +18,7 @@ import {
   deleteEmployeeApi,
   getEmployeeByIdApi,
 } from '@/apis/employee';
-import { getBlocksApi, Block } from '@/apis/block';
+import { getBlocksBySocietyApi, Block } from '@/apis/block';
 import { showMessage } from '@/utils/Constant';
 
 const employeeTypeOptions = [
@@ -76,7 +76,7 @@ export const EmployeesPage = () => {
   const fetchBlocks = async () => {
     try {
       setLoadingBlocks(true);
-      const response = await getBlocksApi({ limit: 1000, status: 'active' });
+      const response = await getBlocksBySocietyApi({ limit: 500, status: 'active' });
       setBlocks(response.items || []);
     } catch (error: any) {
       console.error('Error fetching blocks:', error);
@@ -365,7 +365,7 @@ export const EmployeesPage = () => {
 
   return (
     <div className="min-h-screen bg-[#f9fafb]">
-      <div className="max-w-7xl mx-auto p-6">
+      <div className="max-w-7xl mx-auto">
         {/* Page Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>

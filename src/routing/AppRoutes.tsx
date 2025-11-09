@@ -18,6 +18,16 @@ import SocietyManagement from '../pages/society-management/SocietyManagement';
 import { MembersPage } from '../pages/users/MembersPage';
 import {CommitteeMembersPage} from '../pages/users/CommitteeMembersPage';
 import {EmployeesPage} from '../pages/users/EmployeesPage';
+import { UserRequestPage } from '../pages/users/UserRequestPage';
+import { SelectTypePage } from '../pages/user-registration/SelectTypePage';
+import { SelectSocietyPage } from '../pages/user-registration/SelectSocietyPage';
+import { SelectBlockPage } from '../pages/user-registration/SelectBlockPage';
+import { SelectUnitPage } from '../pages/user-registration/SelectUnitPage';
+import { RegistrationFormPage } from '../pages/user-registration/RegistrationFormPage';
+import { AddBillPage } from '../pages/maintenance-bill/AddBillPage';
+import { ViewBillsPage } from '../pages/maintenance-bill/ViewBillsPage';
+import { ComplaintsPage } from '../pages/complaints/ComplaintsPage';
+import { AddComplaintPage } from '../pages/complaints/AddComplaintPage';
 
 /* current user roles */
 const getUserRoles = (): string => {
@@ -107,6 +117,48 @@ export const AppRoutes = () => {
         }
       />
 
+      {/* User Registration Routes - Public */}
+      <Route
+        path="/user/register/type"
+        element={
+          <PublicRoute>
+            <SelectTypePage />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/user/register/society"
+        element={
+          <PublicRoute>
+            <SelectSocietyPage />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/user/register/block"
+        element={
+          <PublicRoute>
+            <SelectBlockPage />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/user/register/unit"
+        element={
+          <PublicRoute>
+            <SelectUnitPage />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/user/register/details"
+        element={
+          <PublicRoute>
+            <RegistrationFormPage />
+          </PublicRoute>
+        }
+      />
+
       {/* Private Route */}
       <Route
         path="/*"
@@ -151,6 +203,15 @@ export const AppRoutes = () => {
         <Route path="users/members" element={<MembersPage />} />
         <Route path="users/society-employee" element={<EmployeesPage />} />
         <Route path="users/committee-member" element={<CommitteeMembersPage />} />
+        <Route path="users/user-request" element={<UserRequestPage />} />
+        
+        {/* Maintenance & Bills Routes */}
+        <Route path="maintenance-bill/add-bill" element={<AddBillPage />} />
+        <Route path="maintenance-bill/view" element={<ViewBillsPage />} />
+        
+        {/* Complaints Routes */}
+        <Route path="maintenance-bill/complaints" element={<ComplaintsPage />} />
+        <Route path="maintenance-bill/complaints/add" element={<AddComplaintPage />} />
         
         {/* Legacy routes for backward compatibility - redirect to new paths */}
         <Route path="building-details" element={<Navigate to="/building-settings/building-details" replace />} />

@@ -7,7 +7,7 @@ import { CustomSelect } from '../../components/ui/CustomSelect';
 import { DataTable, Column, ActionButton } from '../../components/ui/DataTable';
 import { IconEdit, IconTrash, IconEye, IconCheck, IconX } from '@tabler/icons-react';
 import {
-  getBlocksApi,
+  getBlocksBySocietyApi,
   getBlockByIdApi,
   addBlockApi,
   updateBlockApi,
@@ -17,6 +17,8 @@ import {
   AddBlockPayload,
   UpdateBlockPayload,
 } from '../../apis/block';
+import { getBuildingApi, normalizeBuildingResponse } from '../../apis/building';
+import { getSocietyId } from '../../utils/societyUtils';
 import { showMessage } from '../../utils/Constant';
 
 type BlocksFormData = Yup.InferType<typeof blocksSchema>;
@@ -37,9 +39,12 @@ export const BlocksPage = () => {
   const [total, setTotal] = useState(0);
   const [limit] = useState(20);
   const [submitting, setSubmitting] = useState(false);
+  const [defaultBuildingId, setDefaultBuildingId] = useState<string | null>(null);
+  const [loadingBuilding, setLoadingBuilding] = useState(false);
 
   useEffect(() => {
     document.title = 'Blocks - Smart Society';
+    fetchDefaultBuilding();
     fetchBlocks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -62,17 +67,50 @@ export const BlocksPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, selectedFilters]);
 
+  const fetchDefaultBuilding = async () => {
+    try {
+      setLoadingBuilding(true);
+      const societyId = getSocietyId();
+      if (!societyId) {
+        showMessage('Society ID not found. Please select a society first.', 'error');
+        return;
+      }
+
+      const buildingResponse = await getBuildingApi(societyId);
+      
+      // Normalize building response to handle both 'item' (singular) and 'items' (plural) formats
+      const buildings = normalizeBuildingResponse(buildingResponse);
+
+      // Get the first active building (or first building if no status filter)
+      const activeBuilding = buildings.find((b: any) => b.status === 'active') || buildings[0];
+      
+      if (activeBuilding) {
+        const buildingId = activeBuilding._id || activeBuilding.id;
+        setDefaultBuildingId(buildingId);
+        // Automatically set building in form when it's loaded
+        setValue('building', buildingId);
+      } else {
+        showMessage('No building found for this society. Please create a building first.', 'error');
+      }
+    } catch (error: any) {
+      console.error('Error fetching building:', error);
+      showMessage('Failed to fetch building. Please ensure a building exists for this society.', 'error');
+    } finally {
+      setLoadingBuilding(false);
+    }
+  };
+
   const fetchBlocks = async () => {
     try {
       setLoading(true);
-      const params: GetBlocksParams = {
+      const params = {
         page,
         limit,
         q: searchTerm || undefined,
         status: selectedFilters.status || undefined,
       };
 
-      const response = await getBlocksApi(params);
+      const response = await getBlocksBySocietyApi(params);
       setBlocks(response.items || []);
       setTotal(response.total || 0);
     } catch (error: any) {
@@ -96,37 +134,70 @@ export const BlocksPage = () => {
     defaultValues: {
       blockName: '',
       status: 'active',
-      building: '',
+      building: defaultBuildingId || '',
       description: '',
     },
   });
+
+  // Update form default values when building is loaded
+  useEffect(() => {
+    if (defaultBuildingId) {
+      setValue('building', defaultBuildingId);
+    }
+  }, [defaultBuildingId, setValue]);
 
   const onSubmit = async (data: BlocksFormData) => {
     try {
       setSubmitting(true);
       
+      // Get society ID to send to backend
+      const societyId = getSocietyId();
+      if (!societyId) {
+        showMessage('Society ID not found. Please select a society first.', 'error');
+        return;
+      }
+
       if (editingBlock) {
-        // Update existing block
+        // Extract building ID from editing block (most reliable source)
+        let buildingIdFromBlock = '';
+        if (editingBlock.building) {
+          if (typeof editingBlock.building === 'string') {
+            buildingIdFromBlock = editingBlock.building;
+          } else if (typeof editingBlock.building === 'object' && editingBlock.building !== null) {
+            buildingIdFromBlock = (editingBlock.building as any)?._id || (editingBlock.building as any)?.id || '';
+          }
+        }
+        
+        // Update existing block - send name, status, and societyId
+        // Backend will silently preserve/use building ID from existing block or get from society
         const updatePayload: UpdateBlockPayload = {
           id: editingBlock._id,
           name: data.blockName,
           status: data.status,
-          building: data.building || undefined,
-        };
+          building: buildingIdFromBlock || data.building || defaultBuildingId || undefined, // Include if available
+          societyId: societyId, // Always send society ID so backend can get building if needed
+        } as any;
+        
         await updateBlockApi(updatePayload);
         showMessage('Block updated successfully!', 'success');
       } else {
-        // Add new block
+        // Add new block - backend will automatically get building from society
         const addPayload: AddBlockPayload = {
           name: data.blockName,
           status: data.status,
-          building: data.building || undefined,
-        };
+          building: data.building || defaultBuildingId || undefined, // Optional - backend will auto-set from society
+          societyId: societyId, // Send society ID so backend can get building
+        } as any;
         await addBlockApi(addPayload);
         showMessage('Block added successfully!', 'success');
       }
       
-      reset();
+      reset({
+        blockName: '',
+        status: 'active',
+        building: defaultBuildingId || '',
+        description: '',
+      });
       setShowForm(false);
       setEditingBlock(null);
       fetchBlocks();
@@ -145,7 +216,22 @@ export const BlocksPage = () => {
       setEditingBlock(fullBlock);
       setValue('blockName', fullBlock.name);
       setValue('status', fullBlock.status || 'active');
-      setValue('building', typeof fullBlock.building === 'string' ? fullBlock.building : '');
+      
+      // Extract building ID from the block (could be string or populated object)
+      let buildingId: string = '';
+      if (typeof fullBlock.building === 'string') {
+        buildingId = fullBlock.building;
+      } else if (fullBlock.building && typeof fullBlock.building === 'object') {
+        buildingId = (fullBlock.building as any)?._id || (fullBlock.building as any)?.id || '';
+      }
+      
+      // If no building ID from block, use default building ID
+      if (!buildingId && defaultBuildingId) {
+        buildingId = defaultBuildingId;
+      }
+      
+      // Always set building ID in form (even if empty, backend will handle it)
+      setValue('building', buildingId);
       setShowForm(true);
     } catch (error: any) {
       console.error('Error fetching block details:', error);
@@ -278,7 +364,12 @@ export const BlocksPage = () => {
           <h1 className="text-3xl font-bold text-primary-black">Blocks</h1>
           <button
             onClick={() => {
-              reset();
+              reset({
+                blockName: '',
+                status: 'active',
+                building: defaultBuildingId || '',
+                description: '',
+              });
               setEditingBlock(null);
               setShowForm(true);
             }}
@@ -389,9 +480,14 @@ export const BlocksPage = () => {
               <button
                 type="button"
                 onClick={() => {
+                  reset({
+                    blockName: '',
+                    status: 'active',
+                    building: defaultBuildingId || '',
+                    description: '',
+                  });
                   setShowForm(false);
                   setEditingBlock(null);
-                  reset();
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >
@@ -441,6 +537,20 @@ export const BlocksPage = () => {
                   />
                 </div>
               </div>
+              
+              {/* Info message about automatic building assignment */}
+              {loadingBuilding && (
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <p className="text-sm text-blue-800">Loading building information...</p>
+                </div>
+              )}
+              {!defaultBuildingId && !loadingBuilding && (
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <p className="text-sm text-yellow-800">
+                    No building found for this society. Please create a building first in Building Details.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Form Actions */}
@@ -451,7 +561,7 @@ export const BlocksPage = () => {
                   reset({
                     blockName: '',
                     status: 'active',
-                    building: '',
+                    building: defaultBuildingId || '',
                     description: '',
                   });
                   setShowForm(false);
