@@ -79,7 +79,7 @@ export const FloorsPage = () => {
   const fetchBlocks = async () => {
     try {
       setLoadingBlocks(true);
-      const response = await getBlocksApi({ limit: 1000, status: 'active' });
+      const response = await getBlocksApi({ limit: 100, status: 'active' });
       const blocks = (response.items || []).map((block: Block) => ({
         value: block._id,
         label: block.name || 'Unnamed Block',

@@ -76,7 +76,7 @@ export const EmployeesPage = () => {
   const fetchBlocks = async () => {
     try {
       setLoadingBlocks(true);
-      const response = await getBlocksApi({ limit: 1000, status: 'active' });
+      const response = await getBlocksApi({ limit: 100, status: 'active' });
       setBlocks(response.items || []);
     } catch (error: any) {
       console.error('Error fetching blocks:', error);
