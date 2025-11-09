@@ -17,7 +17,7 @@ import {
   AddFloorPayload,
   UpdateFloorPayload,
 } from '../../apis/floor';
-import { getBlocksApi, Block } from '../../apis/block';
+import { getBlocksBySocietyApi, Block } from '../../apis/block';
 import { getUnitsApi } from '../../apis/unit';
 import { showMessage } from '../../utils/Constant';
 
@@ -77,7 +77,7 @@ export const FloorsPage = () => {
   const fetchBlocks = async () => {
     try {
       setLoadingBlocks(true);
-      const response = await getBlocksApi({ limit: 1000, status: 'active' });
+      const response = await getBlocksBySocietyApi({ limit: 500, status: 'active' });
       const blocks = (response.items || []).map((block: Block) => ({
         value: block._id,
         label: block.name || 'Unnamed Block',

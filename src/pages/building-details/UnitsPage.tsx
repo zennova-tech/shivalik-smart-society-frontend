@@ -6,7 +6,7 @@ import { unitsSchema } from '../../utils/validationSchemas/unitsSchema';
 import { CustomSelect } from '../../components/ui/CustomSelect';
 import { DataTable, Column, ActionButton } from '../../components/ui/DataTable';
 import { IconEdit, IconTrash, IconEye, IconCheck, IconX, IconAlertTriangle } from '@tabler/icons-react';
-import { getBlocksApi, Block } from '../../apis/block';
+import { getBlocksBySocietyApi, Block } from '../../apis/block';
 import { getFloorsApi, Floor } from '../../apis/floor';
 import {
   getUnitsApi,
@@ -92,7 +92,7 @@ export const UnitsPage = () => {
   const fetchBlocks = async () => {
     try {
       setLoadingBlocks(true);
-      const response = await getBlocksApi({ limit: 1000, status: 'active' });
+      const response = await getBlocksBySocietyApi({ limit: 500, status: 'active' });
       const blocks = (response.items || []).map((block: Block) => ({
         value: block._id,
         label: block.name || 'Unnamed Block',
