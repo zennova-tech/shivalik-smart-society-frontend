@@ -1,15 +1,12 @@
 import {
-  IconHome,
   IconBuilding,
-  IconUser,
-  IconTool,
-  IconMessageCircle2,
-  IconCar,
   IconCalendar,
-  IconPhoto,
-  IconCalendarEvent,
-  IconAlertCircle,
-} from '@tabler/icons-react';
+  IconCar,
+  IconHome,
+  IconMessageCircle2,
+  IconTool,
+  IconUser,
+} from "@tabler/icons-react";
 
 export interface MenuItem {
   name: string;
@@ -20,155 +17,137 @@ export interface MenuItem {
 }
 
 export const ROLE_DEFAULTS: Record<string, string> = {
-  SuperAdmin: '/society-management',
-  Manager: '/dashboard'
+  SuperAdmin: "/society-management",
+  Manager: "/dashboard",
 };
 
 export const ROLE_ROUTES: Record<string, string[]> = {
   SuperAdmin: [
-    '/dashboard',
-    '/society-management',
-    '/building-settings/building-details',
-    '/building-settings/floors',
-    '/building-settings/blocks',
-    '/building-settings/units',
-    '/building-settings/notice-board',
-    '/building-settings/parking',
-    '/building-settings/amenities',
-    '/users',
-    '/users/members',
-    '/users/society-employee',
-    '/users/committee-member',
+    "/dashboard",
+    "/society-management",
+    "/building-settings/building-details",
+    "/building-settings/floors",
+    "/building-settings/blocks",
+    "/building-settings/units",
+    "/building-settings/notice-board",
+    "/building-settings/parking",
+    "/building-settings/amenities",
+    "/users",
+    "/users/members",
+    "/users/society-employee",
+    "/users/committee-member",
     // Legacy routes for backward compatibility
-    '/building-details',
-    '/floors',
-    '/blocks',
-    '/units',
-    '/notice-board',
-    '/parking',
-    '/amenities',
-    '/employees',
+    "/building-details",
+    "/floors",
+    "/blocks",
+    "/units",
+    "/notice-board",
+    "/parking",
+    "/amenities",
+    "/employees",
   ],
   Manager: [
-    '/dashboard',
-    '/building-settings/building-details',
-    '/building-settings/floors',
-    '/building-settings/blocks',
-    '/building-settings/units',
-    '/building-settings/notice-board',
-    '/building-settings/parking',
-    '/building-settings/amenities',
-    '/users',
-    '/users/members',
-    '/users/society-employee',
-    '/users/committee-member',
-    '/building-details',
-    '/floors',
-    '/blocks',
-    '/units',
-    '/notice-board',
-    '/parking',
-    '/amenities',
-    '/employees',
+    "/dashboard",
+    "/building-settings/building-details",
+    "/building-settings/floors",
+    "/building-settings/blocks",
+    "/building-settings/units",
+    "/building-settings/notice-board",
+    "/building-settings/parking",
+    "/building-settings/amenities",
+    "/users",
+    "/users/members",
+    "/users/society-employee",
+    "/users/committee-member",
+    "/building-details",
+    "/floors",
+    "/blocks",
+    "/units",
+    "/notice-board",
+    "/parking",
+    "/amenities",
+    "/employees",
   ],
 };
 
 const BASE_MENU_ITEMS: MenuItem[] = [
   {
-    name: 'Society Management',
-    href: '/society-management',
+    name: "Society Management",
+    href: "/society-management",
     icon: IconBuilding,
-    roles: ['SuperAdmin'], // Only available to SuperAdmin
+    roles: ["SuperAdmin"], // Only available to SuperAdmin
   },
   {
-    name: 'Dashboard',
-    href: '/dashboard',
+    name: "Dashboard",
+    href: "/dashboard",
     icon: IconHome,
-    roles: ['SuperAdmin', 'Manager'],
+    roles: ["SuperAdmin", "Manager"],
   },
   {
-    name: 'Building Settings',
-    href: '/building-settings',
+    name: "Building Settings",
+    href: "/building-settings",
     icon: IconBuilding,
-    roles: ['SuperAdmin', 'Manager'],
+    roles: ["SuperAdmin", "Manager"],
     subItems: [
-      { name: 'Building Details', href: '/building-settings/building-details' },
-      { name: 'Floors', href: '/building-settings/floors' },
-      { name: 'Blocks', href: '/building-settings/blocks' },
-      { name: 'Units', href: '/building-settings/units' },
-      { name: 'Parking', href: '/building-settings/parking' },
-      { name: 'Notice Board', href: '/building-settings/notice-board' },
-      { name: 'Amenities', href: '/building-settings/amenities' },
+      { name: "Building Details", href: "/building-settings/building-details" },
+      { name: "Floors", href: "/building-settings/floors" },
+      { name: "Blocks", href: "/building-settings/blocks" },
+      { name: "Units", href: "/building-settings/units" },
+      { name: "Parking", href: "/building-settings/parking" },
+      { name: "Notice Board", href: "/building-settings/notice-board" },
+      { name: "Amenities", href: "/building-settings/amenities" },
     ],
   },
   {
-    name: 'Users',
-    href: '/users',
+    name: "Users",
+    href: "/users",
     icon: IconUser,
-    roles: ['SuperAdmin', 'Manager'],
+    roles: ["SuperAdmin", "Manager"],
     subItems: [
-      { name: 'Members', href: '/users/members' },
-      { name: 'Society Employee', href: '/users/society-employee' },
-      { name: 'Committee Member', href: '/users/committee-member' },
+      { name: "Members", href: "/users/members" },
+      { name: "Society Employee", href: "/users/society-employee" },
+      { name: "Committee Member", href: "/users/committee-member" },
     ],
   },
   {
-    name: 'Maintenance & Bill',
-    href: '/maintenance-bill',
+    name: "Maintenance & Bill",
+    href: "/maintenance-bill",
     icon: IconTool,
-    roles: ['SuperAdmin', 'Manager'],
+    roles: ["SuperAdmin", "Manager"],
     subItems: [
-      { name: 'Add Bill', href: '/maintenance-bill/add-bill' },
-      { name: 'Add Maintenance', href: '/maintenance-bill/add-maintenance' },
-      { name: 'View Maintenance & Bill', href: '/maintenance-bill/view' },
+      { name: "Add Bill", href: "/maintenance-bill/add-bill" },
+      { name: "Add Maintenance", href: "/maintenance-bill/add-maintenance" },
+      { name: "View Maintenance & Bill", href: "/maintenance-bill/view" },
     ],
   },
   {
-    name: 'Complaints',
-    href: '/complaints',
+    name: "Complaints",
+    href: "/complaints",
     icon: IconMessageCircle2,
-    roles: ['SuperAdmin', 'Manager'],
+    roles: ["SuperAdmin", "Manager"],
   },
   {
-    name: 'Parking',
-    href: '/parking',
+    name: "Parking",
+    href: "/parking",
     icon: IconCar,
-    roles: ['SuperAdmin', 'Manager'],
+    roles: ["SuperAdmin", "Manager"],
     subItems: [
-      { name: 'Members Vehicles', href: '/parking/members-vehicles' },
-      { name: 'Vehicle In/Out', href: '/parking/vehicle-in-out' },
-      { name: 'Parking Settings', href: '/parking/settings' },
-      { name: 'Tag Reader Report', href: '/parking/tag-reader-report' },
-      { name: 'RFID Report', href: '/parking/rfid-report' },
+      { name: "Members Vehicles", href: "/parking/members-vehicles" },
+      { name: "Vehicle In/Out", href: "/parking/vehicle-in-out" },
+      { name: "Parking Settings", href: "/parking/settings" },
+      { name: "Tag Reader Report", href: "/parking/tag-reader-report" },
+      { name: "RFID Report", href: "/parking/rfid-report" },
     ],
   },
   {
-    name: 'Events',
-    href: '/events',
+    name: "Events",
+    href: "/events",
     icon: IconCalendar,
-    roles: ['SuperAdmin', 'Manager'],
+    roles: ["SuperAdmin", "Manager"],
     subItems: [
-      { name: 'Add Event', href: '/events/add' },
-      { name: 'View Events', href: '/events/view' },
+      { name: "Add Event", href: "/events/add" },
+      { name: "View Events", href: "/events/view" },
     ],
-  },
-  {
-    name: 'Building Gallery',
-    href: '/building-gallery',
-    icon: IconPhoto,
-    roles: ['SuperAdmin', 'Manager'],
-  },
-  {
-    name: 'Book Amenity',
-    href: '/book-amenity',
-    icon: IconCalendarEvent,
-    roles: ['SuperAdmin', 'Manager'],
-  },
-  {
-    name: 'Penalty',
-    href: '/penalty',
-    icon: IconAlertCircle,
-    roles: ['SuperAdmin', 'Manager'],
   },
 ];
 
@@ -182,7 +161,10 @@ const normalizeRole = (role: string): string => {
 /**
  * Check if user roles match required roles (case-insensitive)
  */
-const hasMatchingRole = (userRoles: string[], requiredRoles: string[]): boolean => {
+const hasMatchingRole = (
+  userRoles: string[],
+  requiredRoles: string[]
+): boolean => {
   const normalizedUserRoles = userRoles.map(normalizeRole);
   return requiredRoles.some((requiredRole) =>
     normalizedUserRoles.includes(normalizeRole(requiredRole))
@@ -202,41 +184,44 @@ export const getMenuItemsForRole = (
   currentPath: string
 ): MenuItem[] => {
   // Normalize roles for comparison
-  const normalizedRoles = roles.length > 0 
-    ? roles 
-    : []; // Keep empty if no roles
+  const normalizedRoles = roles.length > 0 ? roles : []; // Keep empty if no roles
 
   // Debug logging
-  console.log('getMenuItemsForRole called with:', {
+  console.log("getMenuItemsForRole called with:", {
     roles,
     normalizedRoles,
     hasSelectedSociety,
-    currentPath
+    currentPath,
   });
 
   // Only show Society Management to SuperAdmin
   // For non-superadmin users, always filter it out
-  const isSuperAdmin = normalizedRoles.some(role => 
-    normalizeRole(role) === 'superadmin' || normalizeRole(role).includes('superadmin')
+  const isSuperAdmin = normalizedRoles.some(
+    (role) =>
+      normalizeRole(role) === "superadmin" ||
+      normalizeRole(role).includes("superadmin")
   );
 
   // If on society-management page or no society is selected, only show Society Management for SuperAdmin
-  if ((currentPath === '/society-management' || !hasSelectedSociety) && isSuperAdmin) {
+  if (
+    (currentPath === "/society-management" || !hasSelectedSociety) &&
+    isSuperAdmin
+  ) {
     // Only show Society Management for SuperAdmin when on that page or no society selected
     const societyManagementItem = BASE_MENU_ITEMS.find(
-      (item) => item.href === '/society-management'
+      (item) => item.href === "/society-management"
     );
     const result = societyManagementItem ? [societyManagementItem] : [];
-    console.log('Society Management items (SuperAdmin only):', result);
+    console.log("Society Management items (SuperAdmin only):", result);
     return result;
   }
 
   // If not superadmin and on society-management page, they shouldn't be here (will be redirected)
   // So show dashboard and other items
-  if (currentPath === '/society-management' && !isSuperAdmin) {
+  if (currentPath === "/society-management" && !isSuperAdmin) {
     // Filter out society management and show other items
     return BASE_MENU_ITEMS.filter((item) => {
-      if (item.href === '/society-management') return false;
+      if (item.href === "/society-management") return false;
       if (!item.roles || item.roles.length === 0) return true;
       if (normalizedRoles.length === 0) return true;
       return hasMatchingRole(normalizedRoles, item.roles);
@@ -246,7 +231,7 @@ export const getMenuItemsForRole = (
   // If no society selected and not superadmin, show other menu items (they'll be redirected to dashboard)
   if (!hasSelectedSociety && !isSuperAdmin) {
     return BASE_MENU_ITEMS.filter((item) => {
-      if (item.href === '/society-management') return false;
+      if (item.href === "/society-management") return false;
       if (!item.roles || item.roles.length === 0) return true;
       if (normalizedRoles.length === 0) return true;
       return hasMatchingRole(normalizedRoles, item.roles);
@@ -257,10 +242,10 @@ export const getMenuItemsForRole = (
   // Always exclude Society Management for non-superadmin users
   const filteredItems = BASE_MENU_ITEMS.filter((item) => {
     // Always hide Society Management for non-superadmin users
-    if (item.href === '/society-management' && !isSuperAdmin) {
+    if (item.href === "/society-management" && !isSuperAdmin) {
       return false;
     }
-    
+
     // If item has no roles specified, show it to everyone
     if (!item.roles || item.roles.length === 0) {
       return true;
@@ -268,13 +253,13 @@ export const getMenuItemsForRole = (
     // If no user roles provided, show all items (to avoid empty sidebar)
     // This allows users to access the app even if roles aren't properly set
     if (normalizedRoles.length === 0) {
-      console.warn('No user roles found, showing all menu items as fallback');
+      console.warn("No user roles found, showing all menu items as fallback");
       return true;
     }
     // Check if user has at least one of the required roles
     return hasMatchingRole(normalizedRoles, item.roles);
   });
-  
-  console.log('Filtered menu items:', filteredItems.length, 'items');
+
+  console.log("Filtered menu items:", filteredItems.length, "items");
   return filteredItems;
 };

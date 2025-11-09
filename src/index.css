@@ -22,6 +22,14 @@
   overflow: hidden;
 }
 
+/* SweetAlert2 Toast Position - Bottom Right */
+.swal2-container.swal2-bottom-end {
+  bottom: 1em !important;
+  right: 1em !important;
+  top: auto !important;
+  left: auto !important;
+}
+
 /* Hide scrollbar utility */
 @layer utilities {
   .scrollbar-hide {
