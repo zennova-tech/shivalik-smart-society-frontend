@@ -16,8 +16,8 @@ import { AmenitiesPage } from '../pages/building-details/AmenitiesPage';
 import { ParkingPage } from '../pages/building-details/ParkingPage';
 import SocietyManagement from '../pages/society-management/SocietyManagement';
 import { MembersPage } from '../pages/users/MembersPage';
-import { CommitteeMembersPage } from '../pages/users/CommitteeMembersPage';
-import { EmployeesPage } from '../pages/users/EmployeesPage';
+import CommitteeMembersPage from '../pages/users/CommitteeMembersPage';
+import EmployeesPage from '../pages/users/EmployeesPage';
 import { AddBillPage } from '../pages/maintenance-bill/AddBillPage';
 import { ViewBillsPage } from '../pages/maintenance-bill/ViewBillsPage';
 
