@@ -145,7 +145,16 @@ export const CommitteeMembersPage = () => {
         showMessage('Committee member updated successfully!', 'success');
       } else {
         const addPayload: AddCommitteeMemberPayload = {
-          ...cleanData,
+          firstName: data.firstName,
+          lastName: data.lastName || '',
+          block: data.block,
+          building: data.building,
+          society: data.society,
+          countryCode: data.countryCode,
+          mobileNumber: data.mobileNumber,
+          email: data.email || '',
+          memberType: data.memberType,
+          status: data.status,
         };
         await addCommitteeMemberApi(addPayload);
         showMessage('Committee member added successfully!', 'success');

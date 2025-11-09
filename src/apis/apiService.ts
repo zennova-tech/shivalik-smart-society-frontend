@@ -10,11 +10,21 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use((config: any) => {
     const authToken = localStorage.getItem('auth_token');
     if (authToken) {
+        // Parse token if it's stored as JSON string (with quotes)
+        let token = authToken;
+        try {
+            // Try to parse as JSON first (in case it was stored with JSON.stringify)
+            const parsed = JSON.parse(authToken);
+            token = typeof parsed === 'string' ? parsed : authToken;
+        } catch {
+            // If parsing fails, it's already a plain string, use as-is
+            token = authToken;
+        }
         // Remove any surrounding quotes and trim whitespace
-        const token = authToken.replace(/^"|"$/g, '').trim();
+        token = token.replace(/^"|"$/g, '').trim();
         config.headers = {
             ...config.headers,
-            Authorization: token,
+            Authorization: `Bearer ${token}`,
         };
     }
     return config;

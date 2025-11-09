@@ -35,12 +35,12 @@ export interface GetEmployeesParams {
 }
 
 export interface AddEmployeePayload {
-  firstName: string;
+  firstName?: string;
   lastName?: string;
   countryCode?: string;
-  mobileNumber: string;
-  email: string;
-  employeeType: 'security' | 'gardener' | 'electrician' | 'cleaning' | 'admin' | 'other';
+  mobileNumber?: string;
+  email?: string;
+  employeeType?: 'security' | 'gardener' | 'electrician' | 'cleaning' | 'admin' | 'other' | string;
   idProofUrl?: string;
   policeVerificationUrl?: string;
   society?: string;
@@ -56,7 +56,7 @@ export interface UpdateEmployeePayload {
   countryCode?: string;
   mobileNumber?: string;
   email?: string;
-  employeeType?: 'security' | 'gardener' | 'electrician' | 'cleaning' | 'admin' | 'other';
+  employeeType?: 'security' | 'gardener' | 'electrician' | 'cleaning' | 'admin' | 'other' | string;
   idProofUrl?: string;
   policeVerificationUrl?: string;
   society?: string;

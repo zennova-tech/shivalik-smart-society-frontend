@@ -16,8 +16,8 @@ import { AmenitiesPage } from '../pages/building-details/AmenitiesPage';
 import { ParkingPage } from '../pages/building-details/ParkingPage';
 import SocietyManagement from '../pages/society-management/SocietyManagement';
 import { MembersPage } from '../pages/users/MembersPage';
-import CommitteeMembersPage from '../pages/users/CommitteeMembersPage';
-import EmployeesPage from '../pages/employees/EmployeesPage';
+import { CommitteeMembersPage } from '../pages/users/CommitteeMembersPage';
+import { EmployeesPage } from '../pages/users/EmployeesPage';
 import { AddBillPage } from '../pages/maintenance-bill/AddBillPage';
 import { ViewBillsPage } from '../pages/maintenance-bill/ViewBillsPage';
 
@@ -149,9 +149,8 @@ export const AppRoutes = () => {
         <Route path="building-settings/parking" element={<ParkingPage />} />
         
         {/* Users Routes */}
+        <Route path="users" element={<Navigate to="/users/members" replace />} />
         <Route path="users/members" element={<MembersPage />} />
-        
-        {/* Employees Routes */}
         <Route path="users/society-employee" element={<EmployeesPage />} />
         <Route path="users/committee-member" element={<CommitteeMembersPage />} />
         
